@@ -53,7 +53,7 @@ tramo_sel = st.sidebar.selectbox("Seleccione Sector:", df_rol['ETIQUETA'].tolist
 st.sidebar.markdown("---")
 btn_calc = st.sidebar.button("Generar Informe Técnico 🚀")
 
-# --- ESTILOS CSS PERSONALIZADOS (Para que se vea el texto completo) ---
+# --- ESTILOS CSS (Tarjetas bonitas) ---
 st.markdown("""
 <style>
     .info-card {
@@ -74,11 +74,11 @@ st.markdown("""
         letter-spacing: 0.5px;
     }
     .info-value {
-        font-size: 15px; /* Tamaño controlado */
+        font-size: 15px;
         color: #212529;
         font-weight: 600;
         line-height: 1.4;
-        word-wrap: break-word; /* Permite que el texto baje de línea */
+        word-wrap: break-word;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -123,40 +123,16 @@ else:
     
     st.title(f"📍 {nombre}")
     
-    # --- TARJETAS PERSONALIZADAS (HTML) ---
+    # Tarjetas HTML
     c1, c2, c3, c4 = st.columns(4)
-    
     with c1:
-        st.markdown(f"""
-        <div class="info-card">
-            <div class="info-label">Rol Oficial</div>
-            <div class="info-value">{rol_oficial}</div>
-        </div>
-        """, unsafe_allow_html=True)
-        
+        st.markdown(f"<div class='info-card'><div class='info-label'>Rol Oficial</div><div class='info-value'>{rol_oficial}</div></div>", unsafe_allow_html=True)
     with c2:
-        st.markdown(f"""
-        <div class="info-card">
-            <div class="info-label">Tipo de Carpeta</div>
-            <div class="info-value">{carpeta}</div>
-        </div>
-        """, unsafe_allow_html=True)
-        
+        st.markdown(f"<div class='info-card'><div class='info-label'>Tipo de Carpeta</div><div class='info-value'>{carpeta}</div></div>", unsafe_allow_html=True)
     with c3:
-        st.markdown(f"""
-        <div class="info-card">
-            <div class="info-label">Clasificación</div>
-            <div class="info-value">{clasificacion}</div>
-        </div>
-        """, unsafe_allow_html=True)
-        
+        st.markdown(f"<div class='info-card'><div class='info-label'>Clasificación</div><div class='info-value'>{clasificacion}</div></div>", unsafe_allow_html=True)
     with c4:
-        st.markdown(f"""
-        <div class="info-card">
-            <div class="info-label">Calzada</div>
-            <div class="info-value">{calzada_info}</div>
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown(f"<div class='info-card'><div class='info-label'>Calzada</div><div class='info-value'>{calzada_info}</div></div>", unsafe_allow_html=True)
     
     # --- CÁLCULO HOLT ---
     try:
@@ -182,64 +158,57 @@ else:
         st.error(f"Error matemático: {e}")
         st.stop()
 
-    # --- KPI (Estos se quedan como Metric normal porque son cortos) ---
+    # --- KPI CON UNIDADES (AQUÍ ESTÁ EL CAMBIO) ---
     st.markdown("<br>", unsafe_allow_html=True)
     colA, colB, colC = st.columns(3)
-    colA.metric("🚗 Censo 2024", f"{int(tmda_24)}")
-    colB.metric("📈 Proyección 2026", f"{int(tmda_26)}", f"{delta:.1f}%")
-    colC.metric("🔭 Proyección 2045", f"{int(tmda_45)}")
+    
+    # Agregamos "veh/día" para que quede claro técnicamente
+    colA.metric("🚗 Censo 2024", f"{int(tmda_24)} veh/día")
+    colB.metric("📈 Proyección 2026", f"{int(tmda_26)} veh/día", f"{delta:.1f}%")
+    colC.metric("🔭 Proyección 2045", f"{int(tmda_45)} veh/día")
 
-    # --- GRÁFICO CON PUNTO ROJO 🔴 ---
+    # --- GRÁFICO ---
     st.subheader("Evolución de la Demanda y Umbrales")
     fig, ax = plt.subplots(figsize=(10, 5))
     
-    # Líneas
     ax.plot(serie.index, serie.values, 'o-', color='black', label='Histórico')
     ax.plot(pred.index, pred.values, '--', color='#2ca02c', linewidth=2, label='Proyección Holt')
     ax.axhline(5000, color='gray', linestyle=':', alpha=0.5, label='Umbral 5.000')
     
-    # LÓGICA DEL PUNTO ROJO
+    # Punto Rojo
     anio_saturacion = None
     val_saturacion = None
-    es_proyectado = False
-
-    # 1. Revisar historia
+    
+    # 1. Historia
     for y in serie.index:
         if serie[y] >= 5000:
             anio_saturacion = y
             val_saturacion = serie[y]
-            es_proyectado = False
             break 
-    
-    # 2. Revisar futuro
+    # 2. Futuro
     if anio_saturacion is None:
         for y in pred.index:
             if pred[y] >= 5000:
                 anio_saturacion = y
                 val_saturacion = pred[y]
-                es_proyectado = True
                 break
     
-    # 3. Dibujar
     if anio_saturacion is not None:
         ax.scatter([anio_saturacion], [val_saturacion], color='red', s=150, zorder=10, edgecolors='white')
-        
         texto_sat = f"¡SATURACIÓN!\nAño {int(anio_saturacion)}"
         offset_y = 600 if val_saturacion < 10000 else -1500
-        
-        ax.annotate(texto_sat, 
-                    xy=(anio_saturacion, val_saturacion), 
+        ax.annotate(texto_sat, xy=(anio_saturacion, val_saturacion), 
                     xytext=(anio_saturacion, val_saturacion + offset_y),
                     arrowprops=dict(facecolor='red', shrink=0.05),
                     color='red', fontweight='bold', ha='center')
 
-    ax.set_ylabel("Flujo Vehicular (TMDA)")
+    ax.set_ylabel("Flujo Vehicular (veh/día)") # También corregí el eje Y
     ax.xaxis.set_major_locator(MaxNLocator(integer=True))
     ax.legend()
     ax.grid(True, alpha=0.3)
     st.pyplot(fig)
 
-    # --- DIAGNÓSTICO SEGÚN MANUAL DE CARRETERAS ---
+    # --- DIAGNÓSTICO ---
     st.subheader("📋 Diagnóstico Técnico y Recomendaciones")
     
     carpeta_up = carpeta.upper()
@@ -249,23 +218,22 @@ else:
     es_pavimentado = not es_no_pavimentado
     es_doble_via = "DOBLE" in calzada_up or "DOBLE" in carpeta_up
 
-    # LÓGICA EXPERTA
     if es_no_pavimentado:
         if tmda_24 > 300:
-            st.error(f"🔴 **PRIORIDAD ALTA (CAMBIO DE ESTÁNDAR):** Camino de carpeta granular ({carpeta}) con TMDA actual de {int(tmda_24)}. Supera el umbral de 300 veh/día del Manual de Carreteras para caminos básicos. **Se recomienda Proyecto de Pavimentación.**")
+            st.error(f"🔴 **PRIORIDAD ALTA:** Camino granular con {int(tmda_24)} veh/día. Supera norma. **Se recomienda Pavimentación.**")
         else:
-            st.success(f"🟢 **CONSERVACIÓN:** Camino de carpeta granular con tránsito bajo ({int(tmda_24)}). Mantener perfilado y saneamiento.")
+            st.success(f"🟢 **CONSERVACIÓN:** Tránsito bajo ({int(tmda_24)} veh/día). Mantener perfilado.")
             
     elif es_pavimentado:
         if not es_doble_via:
             if tmda_24 > 5000:
-                st.error(f"🔴 **SATURACIÓN DE CAPACIDAD:** Vía bidireccional simple operando sobre 5.000 veh/día ({int(tmda_24)}). Nivel de Servicio deficiente. **Se recomienda Estudio de Prefactibilidad para Ampliación a Doble Calzada.**")
+                st.error(f"🔴 **SATURACIÓN:** Vía simple con {int(tmda_24)} veh/día. **Se sugiere Estudio de Segunda Calzada.**")
             elif tmda_26 > 5000:
-                st.warning(f"🟡 **ALERTA DE PROYECCIÓN:** Aunque opera bajo el límite hoy, se proyecta superar los 5.000 veh/día en el año {anio_saturacion}. **Planificar ampliación a mediano plazo.**")
+                st.warning(f"🟡 **ALERTA:** Se proyecta saturación el año {anio_saturacion}. **Planificar ampliación.**")
             else:
-                st.success("🟢 **OPERACIÓN NORMAL:** La calzada simple tiene capacidad suficiente para la demanda proyectada.")
+                st.success("🟢 **OPERACIÓN NORMAL:** Capacidad suficiente.")
         else:
-            st.success("🟢 **ESTÁNDAR ADECUADO:** La vía cuenta con Doble Calzada, acorde a los flujos vehiculares registrados.")
+            st.success("🟢 **ESTÁNDAR ADECUADO:** Doble Calzada acorde al flujo.")
 
     # Footer
     st.markdown("<br><hr>", unsafe_allow_html=True)
