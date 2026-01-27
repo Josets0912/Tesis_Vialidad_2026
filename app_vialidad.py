@@ -144,95 +144,85 @@ else:
         st.markdown(f"<div class='info-card'><div class='info-label'>Calzada</div><div class='info-value'>{calzada_info}</div></div>", unsafe_allow_html=True)
     
     # --- CÁLCULOS MATEMÁTICOS ---
-    try:
-        # A. Datos Históricos (Censo)
-        anios_censo = [2015, 2017, 2018, 2020, 2022, 2024]
-        vals_censo = fila[[f'TMDA {a}' for a in anios_censo]].values.flatten().astype(float)
-        datos_reales = pd.Series(vals_censo, index=anios_censo).sort_index()
+    # A. Datos Históricos (Censo)
+    anios_censo = [2015, 2017, 2018, 2020, 2022, 2024]
+    vals_censo = fila[[f'TMDA {a}' for a in anios_censo]].values.flatten().astype(float)
+    datos_reales = pd.Series(vals_censo, index=anios_censo).sort_index()
+    
+    # B. INTERPOLACIÓN GEOMÉTRICA
+    serie_completa = {}
+    for i in range(len(anios_censo) - 1):
+        a_inicio = anios_censo[i]
+        a_fin = anios_censo[i+1]
+        v_inicio = datos_reales[a_inicio]
+        v_fin = datos_reales[a_fin]
         
-        # B. INTERPOLACIÓN GEOMÉTRICA
-        serie_completa = {}
-        for i in range(len(anios_censo) - 1):
-            a_inicio = anios_censo[i]
-            a_fin = anios_censo[i+1]
-            v_inicio = datos_reales[a_inicio]
-            v_fin = datos_reales[a_fin]
-            
-            serie_completa[a_inicio] = v_inicio
-            
-            n_anios = a_fin - a_inicio
-            if n_anios > 1:
-                # Calculamos tasa anual 'r' compuesta
-                if v_inicio > 0:
-                    r = (v_fin / v_inicio) ** (1/n_anios) - 1
-                else:
-                    r = 0
-                for k in range(1, n_anios):
-                    anio_intermedio = a_inicio + k
-                    val_intermedio = v_inicio * ((1 + r) ** k)
-                    serie_completa[anio_intermedio] = val_intermedio
+        serie_completa[a_inicio] = v_inicio
         
-        serie_completa[anios_censo[-1]] = datos_reales[anios_censo[-1]]
-        serie = pd.Series(serie_completa).sort_index()
-        
-        # C. PROYECCIÓN HOLT MULTIPLICATIVA AMORTIGUADA (CALIBRADA)
-        try:
-            # AQUÍ ESTÁ EL CAMBIO CLAVE: Trend='mul' y damping_trend=0.92
-            modelo = ExponentialSmoothing(
-                serie, 
-                trend='mul', 
-                seasonal=None, 
-                damped_trend=True
-            ).fit(damping_trend=0.92) # <--- CALIBRACIÓN DEL MODELO (FRENO)
-        except:
-            # Fallback a Aditivo si falla el multiplicativo (por ceros en datos)
-            modelo = ExponentialSmoothing(
-                serie, 
-                trend='add', 
-                seasonal=None, 
-                damped_trend=True
-            ).fit(damping_trend=0.92)
-            
-        anios_fut = np.arange(2025, 2046)
-        pred_raw = modelo.forecast(len(anios_fut))
-        
-        # Aseguramos el índice para evitar errores
-        pred_raw = pd.Series(pred_raw.values, index=anios_fut)
-        
-        # --- CORRECCIÓN DE CRECIMIENTO NEGATIVO (Safety Net) ---
-        pred_ajustada = []
-        ultimo_val_valido = serie.iloc[-1] # Valor 2024
-
-        for y in anios_fut:
-            val_pred = pred_raw[y]
-            # Si el modelo intenta bajar, lo mantenemos plano (Crecimiento 0)
-            if val_pred < ultimo_val_valido:
-                val_final = ultimo_val_valido
+        n_anios = a_fin - a_inicio
+        if n_anios > 1:
+            if v_inicio > 0:
+                r = (v_fin / v_inicio) ** (1/n_anios) - 1
             else:
-                val_final = val_pred
-                ultimo_val_valido = val_final # Nuevo piso
-            pred_ajustada.append(val_final)
-
-        pred = pd.Series(pred_ajustada, index=anios_fut)
+                r = 0
+            for k in range(1, n_anios):
+                anio_intermedio = a_inicio + k
+                val_intermedio = v_inicio * ((1 + r) ** k)
+                serie_completa[anio_intermedio] = val_intermedio
+    
+    serie_completa[anios_censo[-1]] = datos_reales[anios_censo[-1]]
+    serie = pd.Series(serie_completa).sort_index()
+    
+    # C. PROYECCIÓN HOLT (CON UNIÓN VISUAL)
+    # Usamos el modelo Multiplicativo Amortiguado (Calibrado)
+    try:
+        modelo = ExponentialSmoothing(
+            serie, 
+            trend='mul', 
+            seasonal=None, 
+            damped_trend=True
+        ).fit(damping_trend=0.92)
+    except:
+        modelo = ExponentialSmoothing(
+            serie, 
+            trend='add', 
+            seasonal=None, 
+            damped_trend=True
+        ).fit(damping_trend=0.92)
         
-        tmda_24 = serie[2024]
-        tmda_26 = pred[2026]
-        tmda_45 = pred[2045]
-        
-        # D. CÁLCULO DE TASAS PROMEDIO
-        if tmda_24 > 0 and tmda_26 > 0:
-            tasa_24_26 = ((tmda_26 / tmda_24) ** (1/2) - 1) * 100
-        else:
-            tasa_24_26 = 0
-            
-        if tmda_26 > 0 and tmda_45 > 0:
-            tasa_26_45 = ((tmda_45 / tmda_26) ** (1/19) - 1) * 100
-        else:
-            tasa_26_45 = 0
+    anios_fut = np.arange(2025, 2046)
+    pred_raw = modelo.forecast(len(anios_fut))
+    pred_raw = pd.Series(pred_raw.values, index=anios_fut)
+    
+    # --- CORRECCIÓN DE CRECIMIENTO NEGATIVO ---
+    pred_ajustada = []
+    ultimo_val_valido = serie.iloc[-1] # Valor 2024
 
-    except Exception as e:
-        st.error(f"Error en el modelo matemático: {e}")
-        st.stop()
+    for y in anios_fut:
+        val_pred = pred_raw[y]
+        if val_pred < ultimo_val_valido:
+            val_final = ultimo_val_valido
+        else:
+            val_final = val_pred
+            ultimo_val_valido = val_final
+        pred_ajustada.append(val_final)
+
+    pred = pd.Series(pred_ajustada, index=anios_fut)
+    
+    tmda_24 = serie[2024]
+    tmda_26 = pred[2026]
+    tmda_45 = pred[2045]
+    
+    # D. TASAS
+    if tmda_24 > 0 and tmda_26 > 0:
+        tasa_24_26 = ((tmda_26 / tmda_24) ** (1/2) - 1) * 100
+    else:
+        tasa_24_26 = 0
+        
+    if tmda_26 > 0 and tmda_45 > 0:
+        tasa_26_45 = ((tmda_45 / tmda_26) ** (1/19) - 1) * 100
+    else:
+        tasa_26_45 = 0
 
     # --- KPI SUPERIORES ---
     st.markdown("<br>", unsafe_allow_html=True)
@@ -248,34 +238,41 @@ else:
     colB.metric("📈 Proyección 2026", f"{int(tmda_26)} veh/día")
     colC.metric("🔭 Proyección 2045", f"{int(tmda_45)} veh/día")
 
-    # --- GRÁFICO ---
+    # --- GRÁFICO (CON UNIÓN FORZADA) ---
     st.subheader("Evolución de la Demanda y Umbrales")
     fig, ax = plt.subplots(figsize=(10, 5))
     
-    # Separar datos para colores
+    # 1. Historia (Separada para colores)
     x_interp = [a for a in serie.index if a not in anios_censo]
     y_interp = [serie[a] for a in x_interp]
     x_real = anios_censo
     y_real = [serie[a] for a in x_real if a in serie.index]
     
-    # Graficar
     ax.plot(serie.index, serie.values, '-', color='gray', alpha=0.4, linewidth=1)
     ax.scatter(x_interp, y_interp, color='#fd7e14', s=40, label='Interpolado (Geométrico)', zorder=5)
     ax.scatter(x_real, y_real, color='black', s=60, label='Censo Oficial', zorder=10)
     
-    # Proyección Curva
-    ax.plot(pred.index, pred.values, '--', color='#2ca02c', linewidth=2, label='Proyección (Holt Multiplicativo)')
+    # 2. Proyección (UNIDA AL 2024)
+    # Aquí creamos una lista que INCLUYE el 2024 para que la línea nazca de ahí
+    x_proyeccion = [2024] + list(pred.index)
+    y_proyeccion = [serie[2024]] + list(pred.values)
+    
+    # Graficamos la línea verde con marcadores pequeños para ver 2025, 2026...
+    ax.plot(x_proyeccion, y_proyeccion, '--.', color='#2ca02c', linewidth=2, markersize=8, label='Proyección (Ajustada)')
+    
     ax.axhline(5000, color='gray', linestyle=':', alpha=0.5, label='Umbral 5.000')
     
     # Saturación
     anio_saturacion = None
     val_saturacion = None
-    full_series = pd.concat([serie, pred])
     
-    for y in full_series.index:
-        if full_series[y] >= 5000:
+    # Buscamos saturación en la serie combinada
+    full_vals = pd.concat([serie, pred])
+    
+    for y in full_vals.index:
+        if full_vals[y] >= 5000:
             anio_saturacion = y
-            val_saturacion = full_series[y]
+            val_saturacion = full_vals[y]
             break
     
     if anio_saturacion is not None:
