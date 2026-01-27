@@ -204,7 +204,6 @@ else:
             tasa_crecimiento_inicial = 1.0 # Si falla, asumimos plano
             
         # Definimos el punto de partida teórico del modelo para 2024
-        # (Es decir, de dónde "cree" el modelo que viene para dar el salto)
         base_teorica_modelo = pred_raw.iloc[0] / tasa_crecimiento_inicial
         
         # Factor de Corrección: Relación entre la Realidad (2024) y la Alucinación del Modelo
@@ -215,10 +214,9 @@ else:
             factor_ajuste = 1.0
             
         # Aplicamos el factor a toda la curva futura
-        # Esto "baja" la curva verde para que conecte perfecto con el punto negro
         pred_escalada = pred_raw * factor_ajuste
         
-        # 3. SAFETY NET (Anti-caídas)
+        # 3. SAFETY NET (Anti-caídas y Anti-Ceros)
         pred_ajustada = []
         piso = ultimo_real 
 
@@ -269,7 +267,7 @@ else:
     st.subheader("Evolución de la Demanda y Umbrales")
     fig, ax = plt.subplots(figsize=(10, 5))
     
-    # 1. Historia (Separada para colores)
+    # 1. Historia
     x_interp = [a for a in serie.index if a not in anios_censo]
     y_interp = [serie[a] for a in x_interp]
     x_real = anios_censo
@@ -283,9 +281,7 @@ else:
     x_proyeccion = [2024] + list(pred.index)
     y_proyeccion = [serie[2024]] + list(pred.values)
     
-    # Graficamos la línea verde con marcadores pequeños y línea fina
     ax.plot(x_proyeccion, y_proyeccion, '--.', color='#2ca02c', linewidth=1, markersize=4, label='Proyección (Holt Multiplicativo)')
-    
     ax.axhline(5000, color='gray', linestyle=':', alpha=0.5, label='Umbral 5.000')
     
     # Saturación
@@ -327,7 +323,7 @@ else:
         df_tabla['Crecimiento (%)'] = df_tabla['Crecimiento (%)'].apply(lambda x: f"{x:.2f}%")
         st.table(df_tabla)
 
-    # --- DIAGNÓSTICO ---
+    # --- DIAGNÓSTICO INTELIGENTE ---
     st.subheader("📋 Diagnóstico Técnico y Recomendaciones")
     
     carpeta_up = carpeta.upper()
@@ -344,12 +340,20 @@ else:
             
     elif es_pavimentado:
         if not es_doble_via:
+            # 1. ¿Está saturado HOY (2024)?
             if tmda_24 > 5000:
-                st.error(f"🔴 **SATURACIÓN:** Vía simple con {int(tmda_24)} veh/día. **Se sugiere Estudio de Segunda Calzada.**")
+                st.error(f"🔴 **SATURACIÓN VIGENTE:** Vía simple con {int(tmda_24)} veh/día. Supera capacidad. **Se sugiere Estudio de Segunda Calzada.**")
+            
+            # 2. ¿Se saturó antes o se saturará después?
             elif anio_saturacion and anio_saturacion <= 2045:
-                st.warning(f"🟡 **ALERTA:** Se proyecta saturación el año {anio_saturacion}. **Planificar ampliación.**")
+                if anio_saturacion <= 2024:
+                    # CASO PASADO
+                    st.warning(f"🟠 **CAPACIDAD SUPERADA:** El umbral de 5.000 veh/día se alcanzó el año {anio_saturacion}. **Evaluar niveles de servicio actuales.**")
+                else:
+                    # CASO FUTURO
+                    st.warning(f"🟡 **ALERTA:** Se proyecta saturación para el año {anio_saturacion}. **Planificar ampliación.**")
             else:
-                st.success("🟢 **OPERACIÓN NORMAL:** Capacidad suficiente.")
+                st.success("🟢 **OPERACIÓN NORMAL:** Capacidad suficiente durante el periodo de diseño.")
         else:
             st.success("🟢 **ESTÁNDAR ADECUADO:** Doble Calzada acorde al flujo.")
 
