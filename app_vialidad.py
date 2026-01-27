@@ -41,12 +41,17 @@ def cargar_datos():
 
 df = cargar_datos()
 
-# --- 3. MENÚ LATERAL ---
+# --- 3. MENÚ LATERAL (MODIFICADO: POR ROL OFICIAL) ---
 st.sidebar.header("🔍 Panel de Control")
-roles = sorted(df['ROL'].unique())
-rol_sel = st.sidebar.selectbox("Seleccione Rol:", roles)
 
-df_rol = df[df['ROL'] == rol_sel]
+# CAMBIO CLAVE: Usamos 'ROL NUEVO' para la lista desplegable
+# Esto asegura que aparezcan los nombres oficiales vigentes hoy en día.
+roles = sorted(df['ROL NUEVO'].unique())
+rol_sel = st.sidebar.selectbox("Seleccione Rol Oficial:", roles)
+
+# Filtramos el dataframe usando la columna 'ROL NUEVO'
+df_rol = df[df['ROL NUEVO'] == rol_sel]
+
 df_rol['ETIQUETA'] = df_rol['NOMBRE DEL CAMINO'] + " (" + df_rol['ESTACIÓN'] + ")"
 tramo_sel = st.sidebar.selectbox("Seleccione Sector:", df_rol['ETIQUETA'].tolist())
 
@@ -245,7 +250,7 @@ else:
     colB.metric("📈 Proyección 2026", f"{int(tmda_26)} veh/día")
     colC.metric("🔭 Proyección 2045", f"{int(tmda_45)} veh/día")
 
-    # --- GRÁFICO ---
+    # --- GRÁFICO (MODIFICADO: SOLO ALERTA FUTURA) ---
     st.subheader("Evolución de la Demanda y Umbrales")
     fig, ax = plt.subplots(figsize=(10, 5))
     
@@ -308,7 +313,6 @@ else:
     # --- SECCIÓN FINAL: DIAGNÓSTICO + CRITERIOS ---
     st.subheader("📋 Diagnóstico Técnico y Criterios de Diseño")
     
-    # Dividimos en 2 columnas: Diagnóstico (Izquierda) y Tabla Referencia (Derecha)
     col_diag, col_crit = st.columns([1.3, 1])
 
     with col_diag:
