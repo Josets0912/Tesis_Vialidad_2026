@@ -144,21 +144,19 @@ else:
         st.markdown(f"<div class='info-card'><div class='info-label'>Calzada</div><div class='info-value'>{calzada_info}</div></div>", unsafe_allow_html=True)
     
     # --- CÁLCULOS MATEMÁTICOS ---
-    # A. Datos Históricos (Censo)
+    # A. Datos Históricos
     anios_censo = [2015, 2017, 2018, 2020, 2022, 2024]
     vals_censo = fila[[f'TMDA {a}' for a in anios_censo]].values.flatten().astype(float)
     datos_reales = pd.Series(vals_censo, index=anios_censo).sort_index()
     
-    # B. INTERPOLACIÓN GEOMÉTRICA
+    # B. Interpolación
     serie_completa = {}
     for i in range(len(anios_censo) - 1):
         a_inicio = anios_censo[i]
         a_fin = anios_censo[i+1]
         v_inicio = datos_reales[a_inicio]
         v_fin = datos_reales[a_fin]
-        
         serie_completa[a_inicio] = v_inicio
-        
         n_anios = a_fin - a_inicio
         if n_anios > 1:
             if v_inicio > 0:
@@ -166,90 +164,57 @@ else:
             else:
                 r = 0
             for k in range(1, n_anios):
-                anio_intermedio = a_inicio + k
-                val_intermedio = v_inicio * ((1 + r) ** k)
-                serie_completa[anio_intermedio] = val_intermedio
-    
+                serie_completa[a_inicio + k] = v_inicio * ((1 + r) ** k)
     serie_completa[anios_censo[-1]] = datos_reales[anios_censo[-1]]
     serie = pd.Series(serie_completa).sort_index()
     
-    # C. PROYECCIÓN HOLT CON ANCLAJE DE CONTINUIDAD
-    # ---------------------------------------------
+    # C. Proyección Holt (Con Anclaje)
     try:
-        # 1. Ajustamos el modelo (intentamos curva, si falla, recta)
         try:
-            modelo = ExponentialSmoothing(
-                serie, 
-                trend='mul', 
-                seasonal=None, 
-                damped_trend=True
-            ).fit(damping_trend=0.92)
+            modelo = ExponentialSmoothing(serie, trend='mul', seasonal=None, damped_trend=True).fit(damping_trend=0.92)
         except:
-            modelo = ExponentialSmoothing(
-                serie, 
-                trend='add', 
-                seasonal=None, 
-                damped_trend=True
-            ).fit(damping_trend=0.92)
+            modelo = ExponentialSmoothing(serie, trend='add', seasonal=None, damped_trend=True).fit(damping_trend=0.92)
             
         anios_fut = np.arange(2025, 2046)
         pred_raw = modelo.forecast(len(anios_fut))
         pred_raw = pd.Series(pred_raw.values, index=anios_fut)
         
-        # 2. ALGORITMO DE ANCLAJE (Corrección del Salto)
-        # Calculamos cuánto quería crecer el modelo el primer año
+        # Anclaje
         if pred_raw.iloc[0] > 0 and pred_raw.iloc[1] > 0:
             tasa_crecimiento_inicial = pred_raw.iloc[1] / pred_raw.iloc[0]
         else:
-            tasa_crecimiento_inicial = 1.0 # Si falla, asumimos plano
-            
-        # Definimos el punto de partida teórico del modelo para 2024
-        base_teorica_modelo = pred_raw.iloc[0] / tasa_crecimiento_inicial
+            tasa_crecimiento_inicial = 1.0
         
-        # Factor de Corrección: Relación entre la Realidad (2024) y la Alucinación del Modelo
+        base_teorica_modelo = pred_raw.iloc[0] / tasa_crecimiento_inicial
         ultimo_real = serie.iloc[-1]
-        if base_teorica_modelo > 0:
-            factor_ajuste = ultimo_real / base_teorica_modelo
-        else:
-            factor_ajuste = 1.0
-            
-        # Aplicamos el factor a toda la curva futura
+        factor_ajuste = ultimo_real / base_teorica_modelo if base_teorica_modelo > 0 else 1.0
         pred_escalada = pred_raw * factor_ajuste
         
-        # 3. SAFETY NET (Anti-caídas y Anti-Ceros)
+        # Safety Net
         pred_ajustada = []
         piso = ultimo_real 
-
         for y in anios_fut:
             val = pred_escalada[y]
             if val < piso:
-                val = piso # No permitimos que baje de lo que ya hay
+                val = piso
             else:
-                piso = val # Actualizamos el piso si sube
+                piso = val
             pred_ajustada.append(val)
-
         pred = pd.Series(pred_ajustada, index=anios_fut)
 
     except Exception as e:
-        st.error(f"Error de cálculo: {e}")
+        st.error(f"Error: {e}")
         st.stop()
     
     tmda_24 = serie[2024]
     tmda_26 = pred[2026]
     tmda_45 = pred[2045]
     
-    # D. TASAS
-    if tmda_24 > 0 and tmda_26 > 0:
-        tasa_24_26 = ((tmda_26 / tmda_24) ** (1/2) - 1) * 100
-    else:
-        tasa_24_26 = 0
-        
-    if tmda_26 > 0 and tmda_45 > 0:
-        tasa_26_45 = ((tmda_45 / tmda_26) ** (1/19) - 1) * 100
-    else:
-        tasa_26_45 = 0
+    # Tasas
+    tasa_24_26 = ((tmda_26 / tmda_24) ** (1/2) - 1) * 100 if tmda_24 > 0 and tmda_26 > 0 else 0
+    tasa_26_45 = ((tmda_45 / tmda_26) ** (1/19) - 1) * 100 if tmda_26 > 0 and tmda_45 > 0 else 0
 
-    # --- KPI SUPERIORES ---
+    # KPI
     st.markdown("<br>", unsafe_allow_html=True)
     st.markdown(f"""
         <div class='rate-box'>
@@ -263,11 +228,11 @@ else:
     colB.metric("📈 Proyección 2026", f"{int(tmda_26)} veh/día")
     colC.metric("🔭 Proyección 2045", f"{int(tmda_45)} veh/día")
 
-    # --- GRÁFICO (CON UNIÓN FORZADA) ---
+    # --- GRÁFICO (MODIFICADO: SOLO ALERTA FUTURA) ---
     st.subheader("Evolución de la Demanda y Umbrales")
     fig, ax = plt.subplots(figsize=(10, 5))
     
-    # 1. Historia
+    # Historia
     x_interp = [a for a in serie.index if a not in anios_censo]
     y_interp = [serie[a] for a in x_interp]
     x_real = anios_censo
@@ -277,29 +242,38 @@ else:
     ax.scatter(x_interp, y_interp, color='#fd7e14', s=40, label='Interpolado (Geométrico)', zorder=5)
     ax.scatter(x_real, y_real, color='black', s=60, label='Censo Oficial', zorder=10)
     
-    # 2. Proyección (UNIDA AL 2024 CON ESTILO FINO)
+    # Proyección
     x_proyeccion = [2024] + list(pred.index)
     y_proyeccion = [serie[2024]] + list(pred.values)
-    
     ax.plot(x_proyeccion, y_proyeccion, '--.', color='#2ca02c', linewidth=1, markersize=4, label='Proyección (Holt Multiplicativo)')
+    
     ax.axhline(5000, color='gray', linestyle=':', alpha=0.5, label='Umbral 5.000')
     
-    # Saturación
+    # --- LÓGICA DE SATURACIÓN CORREGIDA ---
+    # Solo buscamos saturación DESDE 2024 EN ADELANTE
+    # Ignoramos si se saturó en 2017 si hoy está bajo norma
     anio_saturacion = None
     val_saturacion = None
     
-    # Buscamos saturación en la serie combinada
+    # Combinamos para buscar, pero filtramos años >= 2024
     full_vals = pd.concat([serie, pred])
+    solo_futuro = full_vals[full_vals.index >= 2024] # <--- FILTRO CLAVE
     
-    for y in full_vals.index:
-        if full_vals[y] >= 5000:
+    for y in solo_futuro.index:
+        if solo_futuro[y] >= 5000:
             anio_saturacion = y
-            val_saturacion = full_vals[y]
+            val_saturacion = solo_futuro[y]
             break
     
     if anio_saturacion is not None:
         ax.scatter([anio_saturacion], [val_saturacion], color='red', s=150, zorder=15, edgecolors='white')
-        texto_sat = f"¡SATURACIÓN!\nAño {int(anio_saturacion)}"
+        
+        # Ajustamos texto según si es HOY (2024) o FUTURO
+        if anio_saturacion == 2024:
+             texto_sat = f"¡SATURADO HOY!\n(Año 2024)"
+        else:
+             texto_sat = f"¡SATURACIÓN!\nAño {int(anio_saturacion)}"
+             
         offset_y = 600 if val_saturacion < 10000 else -1500
         ax.annotate(texto_sat, xy=(anio_saturacion, val_saturacion), 
                     xytext=(anio_saturacion, val_saturacion + offset_y),
@@ -312,18 +286,16 @@ else:
     ax.grid(True, alpha=0.3)
     st.pyplot(fig)
 
-    # --- TABLA DE DATOS ---
     with st.expander("📄 Ver Tabla de Proyección de Tránsito y Crecimiento", expanded=False):
         df_tabla = pd.DataFrame({'TMDA Proyectado': pred.values}, index=pred.index)
         serie_completa_calc = pd.concat([pd.Series([tmda_24], index=[2024]), pred])
         crecimiento_pct = serie_completa_calc.pct_change() * 100
-        
         df_tabla['Crecimiento (%)'] = crecimiento_pct.loc[2025:]
         df_tabla['TMDA Proyectado'] = df_tabla['TMDA Proyectado'].astype(int)
         df_tabla['Crecimiento (%)'] = df_tabla['Crecimiento (%)'].apply(lambda x: f"{x:.2f}%")
         st.table(df_tabla)
 
-    # --- DIAGNÓSTICO INTELIGENTE ---
+    # --- DIAGNÓSTICO CORREGIDO ---
     st.subheader("📋 Diagnóstico Técnico y Recomendaciones")
     
     carpeta_up = carpeta.upper()
@@ -342,21 +314,16 @@ else:
         if not es_doble_via:
             # 1. ¿Está saturado HOY (2024)?
             if tmda_24 > 5000:
-                st.error(f"🔴 **SATURACIÓN VIGENTE:** Vía simple con {int(tmda_24)} veh/día. Supera capacidad. **Se sugiere Estudio de Segunda Calzada.**")
+                st.error(f"🔴 **SATURACIÓN VIGENTE (2024):** Vía simple con {int(tmda_24)} veh/día. Supera capacidad actual. **Se sugiere Estudio de Segunda Calzada.**")
             
-            # 2. ¿Se saturó antes o se saturará después?
-            elif anio_saturacion and anio_saturacion <= 2045:
-                if anio_saturacion <= 2024:
-                    # CASO PASADO
-                    st.warning(f"🟠 **CAPACIDAD SUPERADA:** El umbral de 5.000 veh/día se alcanzó el año {anio_saturacion}. **Evaluar niveles de servicio actuales.**")
-                else:
-                    # CASO FUTURO
-                    st.warning(f"🟡 **ALERTA:** Se proyecta saturación para el año {anio_saturacion}. **Planificar ampliación.**")
+            # 2. ¿Se saturará en el FUTURO? (Ignoramos el pasado 2017)
+            elif anio_saturacion and anio_saturacion > 2024:
+                st.warning(f"🟡 **ALERTA:** Se proyecta saturación para el año {anio_saturacion}. **Planificar ampliación antes de esa fecha.**")
+                
             else:
-                st.success("🟢 **OPERACIÓN NORMAL:** Capacidad suficiente durante el periodo de diseño.")
+                st.success("🟢 **OPERACIÓN NORMAL:** Capacidad suficiente durante todo el periodo de proyección.")
         else:
             st.success("🟢 **ESTÁNDAR ADECUADO:** Doble Calzada acorde al flujo.")
 
-    # Footer
     st.markdown("<br><hr>", unsafe_allow_html=True)
     st.markdown("<div style='text-align: center; color: #888;'><small>Creado por José Tapia - Tesis Ingeniería Civil</small></div>", unsafe_allow_html=True)
