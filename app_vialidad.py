@@ -53,7 +53,7 @@ tramo_sel = st.sidebar.selectbox("Seleccione Sector:", df_rol['ETIQUETA'].tolist
 st.sidebar.markdown("---")
 btn_calc = st.sidebar.button("Generar Informe Técnico 🚀")
 
-# --- ESTILOS CSS ---
+# --- ESTILOS CSS (Tarjetas bonitas) ---
 st.markdown("""
 <style>
     .info-card {
@@ -79,15 +79,6 @@ st.markdown("""
         font-weight: 600;
         line-height: 1.4;
         word-wrap: break-word;
-    }
-    .rate-box {
-        background-color: #e8f4f8;
-        padding: 10px;
-        border-radius: 5px;
-        border-left: 5px solid #17a2b8;
-        margin-bottom: 15px;
-        color: #0c5460;
-        font-weight: 500;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -143,128 +134,67 @@ else:
     with c4:
         st.markdown(f"<div class='info-card'><div class='info-label'>Calzada</div><div class='info-value'>{calzada_info}</div></div>", unsafe_allow_html=True)
     
-    # --- CÁLCULOS MATEMÁTICOS ---
+    # --- CÁLCULO HOLT ---
     try:
-        # A. Datos Históricos (Censo)
-        anios_censo = [2015, 2017, 2018, 2020, 2022, 2024]
-        vals_censo = fila[[f'TMDA {a}' for a in anios_censo]].values.flatten().astype(float)
-        datos_reales = pd.Series(vals_censo, index=anios_censo).sort_index()
+        anios = [2015, 2017, 2018, 2020, 2022, 2024]
+        vals = fila[[f'TMDA {a}' for a in anios]].values.flatten().astype(float)
         
-        # B. INTERPOLACIÓN GEOMÉTRICA
-        serie_completa = {}
-        for i in range(len(anios_censo) - 1):
-            a_inicio = anios_censo[i]
-            a_fin = anios_censo[i+1]
-            v_inicio = datos_reales[a_inicio]
-            v_fin = datos_reales[a_fin]
-            
-            serie_completa[a_inicio] = v_inicio
-            
-            n_anios = a_fin - a_inicio
-            if n_anios > 1:
-                # Tasa anual 'r'
-                if v_inicio > 0:
-                    r = (v_fin / v_inicio) ** (1/n_anios) - 1
-                else:
-                    r = 0
-                
-                for k in range(1, n_anios):
-                    anio_intermedio = a_inicio + k
-                    val_intermedio = v_inicio * ((1 + r) ** k)
-                    serie_completa[anio_intermedio] = val_intermedio
+        serie = pd.Series(index=np.arange(2015, 2025), dtype=float)
+        for a, v in zip(anios, vals):
+            serie[a] = v
+        serie = serie.interpolate(method='linear')
         
-        serie_completa[anios_censo[-1]] = datos_reales[anios_censo[-1]]
-        serie = pd.Series(serie_completa).sort_index()
-        
-        # C. PROYECCIÓN HOLT CON CORRECCIÓN
         modelo = ExponentialSmoothing(serie, trend='add', seasonal=None, damped_trend=True).fit()
         anios_fut = np.arange(2025, 2046)
-        pred_raw = modelo.forecast(len(anios_fut))
+        pred = modelo.forecast(len(anios_fut))
+        pred.index = anios_fut
         
-        # --- FIX: Aseguramos el índice correcto para evitar KeyError '2025' ---
-        pred_raw = pd.Series(pred_raw.values, index=anios_fut)
-        # --------------------------------------------------------------------
-        
-        # --- LOGICA PUNTO 3: CORRECCIÓN DE CRECIMIENTO NEGATIVO ---
-        pred_ajustada = []
-        ultimo_val_valido = serie.iloc[-1] # Valor 2024
-
-        for y in anios_fut:
-            val_pred = pred_raw[y]
-            
-            # Si la predicción baja respecto al acumulado anterior, mantenemos el valor (crecimiento 0)
-            if val_pred < ultimo_val_valido:
-                val_final = ultimo_val_valido
-            else:
-                val_final = val_pred
-                ultimo_val_valido = val_final # Nuevo piso
-            
-            pred_ajustada.append(val_final)
-
-        pred = pd.Series(pred_ajustada, index=anios_fut)
-        
-        tmda_24 = serie[2024]
-        tmda_26 = pred[2026]
-        tmda_45 = pred[2045]
-        
-        # D. CÁLCULO DE TASAS PROMEDIO ANUALES
-        if tmda_24 > 0 and tmda_26 > 0:
-            tasa_24_26 = ((tmda_26 / tmda_24) ** (1/2) - 1) * 100
-        else:
-            tasa_24_26 = 0
-            
-        if tmda_26 > 0 and tmda_45 > 0:
-            tasa_26_45 = ((tmda_45 / tmda_26) ** (1/19) - 1) * 100
-        else:
-            tasa_26_45 = 0
+        tmda_24 = vals[-1]
+        tmda_26 = pred.loc[2026]
+        tmda_45 = pred.loc[2045]
+        delta = ((tmda_26 - tmda_24)/tmda_24)*100
 
     except Exception as e:
-        st.error(f"Error matemático detallado: {e}")
+        st.error(f"Error matemático: {e}")
         st.stop()
 
-    # --- KPI SUPERIORES ---
+    # --- KPI CON UNIDADES (AQUÍ ESTÁ EL CAMBIO) ---
     st.markdown("<br>", unsafe_allow_html=True)
-    
-    st.markdown(f"""
-        <div class='rate-box'>
-            📊 Tasa Promedio Anual (2024-2026): <b>{tasa_24_26:.2f}%</b> &nbsp;|&nbsp; 
-            Tasa Promedio Anual (2026-2045): <b>{tasa_26_45:.2f}%</b>
-        </div>
-    """, unsafe_allow_html=True)
-    
     colA, colB, colC = st.columns(3)
+    
+    # Agregamos "veh/día" para que quede claro técnicamente
     colA.metric("🚗 Censo 2024", f"{int(tmda_24)} veh/día")
-    colB.metric("📈 Proyección 2026", f"{int(tmda_26)} veh/día")
+    colB.metric("📈 Proyección 2026", f"{int(tmda_26)} veh/día", f"{delta:.1f}%")
     colC.metric("🔭 Proyección 2045", f"{int(tmda_45)} veh/día")
 
     # --- GRÁFICO ---
     st.subheader("Evolución de la Demanda y Umbrales")
     fig, ax = plt.subplots(figsize=(10, 5))
     
-    x_interp = [a for a in serie.index if a not in anios_censo]
-    y_interp = [serie[a] for a in x_interp]
-    x_real = anios_censo
-    y_real = [serie[a] for a in x_real if a in serie.index]
-    
-    ax.plot(serie.index, serie.values, '-', color='gray', alpha=0.4, linewidth=1)
-    ax.scatter(x_interp, y_interp, color='#fd7e14', s=40, label='Interpolado (Geométrico)', zorder=5)
-    ax.scatter(x_real, y_real, color='black', s=60, label='Censo Oficial', zorder=10)
-    
-    ax.plot(pred.index, pred.values, '--', color='#2ca02c', linewidth=2, label='Proyección (Ajustada)')
+    ax.plot(serie.index, serie.values, 'o-', color='black', label='Histórico')
+    ax.plot(pred.index, pred.values, '--', color='#2ca02c', linewidth=2, label='Proyección Holt')
     ax.axhline(5000, color='gray', linestyle=':', alpha=0.5, label='Umbral 5.000')
     
+    # Punto Rojo
     anio_saturacion = None
     val_saturacion = None
     
-    full_series = pd.concat([serie, pred])
-    for y in full_series.index:
-        if full_series[y] >= 5000:
+    # 1. Historia
+    for y in serie.index:
+        if serie[y] >= 5000:
             anio_saturacion = y
-            val_saturacion = full_series[y]
-            break
+            val_saturacion = serie[y]
+            break 
+    # 2. Futuro
+    if anio_saturacion is None:
+        for y in pred.index:
+            if pred[y] >= 5000:
+                anio_saturacion = y
+                val_saturacion = pred[y]
+                break
     
     if anio_saturacion is not None:
-        ax.scatter([anio_saturacion], [val_saturacion], color='red', s=150, zorder=15, edgecolors='white')
+        ax.scatter([anio_saturacion], [val_saturacion], color='red', s=150, zorder=10, edgecolors='white')
         texto_sat = f"¡SATURACIÓN!\nAño {int(anio_saturacion)}"
         offset_y = 600 if val_saturacion < 10000 else -1500
         ax.annotate(texto_sat, xy=(anio_saturacion, val_saturacion), 
@@ -272,22 +202,11 @@ else:
                     arrowprops=dict(facecolor='red', shrink=0.05),
                     color='red', fontweight='bold', ha='center')
 
-    ax.set_ylabel("Flujo Vehicular (veh/día)")
+    ax.set_ylabel("Flujo Vehicular (veh/día)") # También corregí el eje Y
     ax.xaxis.set_major_locator(MaxNLocator(integer=True))
-    ax.legend(loc='upper left')
+    ax.legend()
     ax.grid(True, alpha=0.3)
     st.pyplot(fig)
-
-    # --- TABLA DE DATOS ---
-    with st.expander("📄 Ver Tabla de Proyección de Tránsito y Crecimiento", expanded=False):
-        df_tabla = pd.DataFrame({'TMDA Proyectado': pred.values}, index=pred.index)
-        serie_completa_calc = pd.concat([pd.Series([tmda_24], index=[2024]), pred])
-        crecimiento_pct = serie_completa_calc.pct_change() * 100
-        
-        df_tabla['Crecimiento (%)'] = crecimiento_pct.loc[2025:]
-        df_tabla['TMDA Proyectado'] = df_tabla['TMDA Proyectado'].astype(int)
-        df_tabla['Crecimiento (%)'] = df_tabla['Crecimiento (%)'].apply(lambda x: f"{x:.2f}%")
-        st.table(df_tabla)
 
     # --- DIAGNÓSTICO ---
     st.subheader("📋 Diagnóstico Técnico y Recomendaciones")
@@ -309,7 +228,7 @@ else:
         if not es_doble_via:
             if tmda_24 > 5000:
                 st.error(f"🔴 **SATURACIÓN:** Vía simple con {int(tmda_24)} veh/día. **Se sugiere Estudio de Segunda Calzada.**")
-            elif anio_saturacion and anio_saturacion <= 2045:
+            elif tmda_26 > 5000:
                 st.warning(f"🟡 **ALERTA:** Se proyecta saturación el año {anio_saturacion}. **Planificar ampliación.**")
             else:
                 st.success("🟢 **OPERACIÓN NORMAL:** Capacidad suficiente.")
