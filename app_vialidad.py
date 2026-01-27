@@ -150,7 +150,7 @@ else:
         vals_censo = fila[[f'TMDA {a}' for a in anios_censo]].values.flatten().astype(float)
         datos_reales = pd.Series(vals_censo, index=anios_censo).sort_index()
         
-        # B. INTERPOLACIÓN GEOMÉTRICA (PUNTO 2)
+        # B. INTERPOLACIÓN GEOMÉTRICA
         serie_completa = {}
         for i in range(len(anios_censo) - 1):
             a_inicio = anios_censo[i]
@@ -162,7 +162,7 @@ else:
             
             n_anios = a_fin - a_inicio
             if n_anios > 1:
-                # Calculamos tasa anual 'r' para este intervalo
+                # Tasa anual 'r'
                 if v_inicio > 0:
                     r = (v_fin / v_inicio) ** (1/n_anios) - 1
                 else:
@@ -176,38 +176,38 @@ else:
         serie_completa[anios_censo[-1]] = datos_reales[anios_censo[-1]]
         serie = pd.Series(serie_completa).sort_index()
         
-        # C. PROYECCIÓN HOLT CON CORRECCIÓN (PUNTO 3)
+        # C. PROYECCIÓN HOLT CON CORRECCIÓN
         modelo = ExponentialSmoothing(serie, trend='add', seasonal=None, damped_trend=True).fit()
         anios_fut = np.arange(2025, 2046)
-        pred_raw = modelo.forecast(len(anios_fut)) # Predicción cruda del modelo
+        pred_raw = modelo.forecast(len(anios_fut))
+        
+        # --- FIX: Aseguramos el índice correcto para evitar KeyError '2025' ---
+        pred_raw = pd.Series(pred_raw.values, index=anios_fut)
+        # --------------------------------------------------------------------
         
         # --- LOGICA PUNTO 3: CORRECCIÓN DE CRECIMIENTO NEGATIVO ---
         pred_ajustada = []
-        ultimo_val_valido = serie.iloc[-1] # Valor base (2024)
+        ultimo_val_valido = serie.iloc[-1] # Valor 2024
 
         for y in anios_fut:
             val_pred = pred_raw[y]
             
-            # Si la predicción es MENOR al último valor válido, asumimos CRECIMIENTO CERO
+            # Si la predicción baja respecto al acumulado anterior, mantenemos el valor (crecimiento 0)
             if val_pred < ultimo_val_valido:
                 val_final = ultimo_val_valido
             else:
                 val_final = val_pred
-                # Actualizamos el 'piso' solo si sube. Si baja, el piso se mantiene.
-                ultimo_val_valido = val_final
+                ultimo_val_valido = val_final # Nuevo piso
             
             pred_ajustada.append(val_final)
 
-        # Convertimos la lista ajustada a Serie de pandas
         pred = pd.Series(pred_ajustada, index=anios_fut)
-        # ----------------------------------------------------------
         
         tmda_24 = serie[2024]
         tmda_26 = pred[2026]
         tmda_45 = pred[2045]
         
-        # D. CÁLCULO DE TASAS PROMEDIO ANUALES (PUNTO 2)
-        # Protegemos contra división por cero o negativos en raíces
+        # D. CÁLCULO DE TASAS PROMEDIO ANUALES
         if tmda_24 > 0 and tmda_26 > 0:
             tasa_24_26 = ((tmda_26 / tmda_24) ** (1/2) - 1) * 100
         else:
@@ -219,7 +219,7 @@ else:
             tasa_26_45 = 0
 
     except Exception as e:
-        st.error(f"Error matemático: {e}")
+        st.error(f"Error matemático detallado: {e}")
         st.stop()
 
     # --- KPI SUPERIORES ---
@@ -237,13 +237,12 @@ else:
     colB.metric("📈 Proyección 2026", f"{int(tmda_26)} veh/día")
     colC.metric("🔭 Proyección 2045", f"{int(tmda_45)} veh/día")
 
-    # --- GRÁFICO (PUNTO 2 - COLORES) ---
+    # --- GRÁFICO ---
     st.subheader("Evolución de la Demanda y Umbrales")
     fig, ax = plt.subplots(figsize=(10, 5))
     
     x_interp = [a for a in serie.index if a not in anios_censo]
     y_interp = [serie[a] for a in x_interp]
-    
     x_real = anios_censo
     y_real = [serie[a] for a in x_real if a in serie.index]
     
@@ -251,7 +250,6 @@ else:
     ax.scatter(x_interp, y_interp, color='#fd7e14', s=40, label='Interpolado (Geométrico)', zorder=5)
     ax.scatter(x_real, y_real, color='black', s=60, label='Censo Oficial', zorder=10)
     
-    # Proyección Ajustada
     ax.plot(pred.index, pred.values, '--', color='#2ca02c', linewidth=2, label='Proyección (Ajustada)')
     ax.axhline(5000, color='gray', linestyle=':', alpha=0.5, label='Umbral 5.000')
     
@@ -280,7 +278,7 @@ else:
     ax.grid(True, alpha=0.3)
     st.pyplot(fig)
 
-    # --- TABLA DE DATOS (PUNTO 1) ---
+    # --- TABLA DE DATOS ---
     with st.expander("📄 Ver Tabla de Proyección de Tránsito y Crecimiento", expanded=False):
         df_tabla = pd.DataFrame({'TMDA Proyectado': pred.values}, index=pred.index)
         serie_completa_calc = pd.concat([pd.Series([tmda_24], index=[2024]), pred])
