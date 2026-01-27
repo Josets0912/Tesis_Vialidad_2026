@@ -89,6 +89,23 @@ st.markdown("""
         color: #0c5460;
         font-weight: 500;
     }
+    .ref-table {
+        font-size: 12px;
+        width: 100%;
+        border-collapse: collapse;
+    }
+    .ref-table th {
+        background-color: #f1f3f5;
+        border-bottom: 2px solid #dee2e6;
+        padding: 8px;
+        text-align: left;
+        color: #495057;
+    }
+    .ref-table td {
+        border-bottom: 1px solid #dee2e6;
+        padding: 8px;
+        color: #212529;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -228,7 +245,7 @@ else:
     colB.metric("📈 Proyección 2026", f"{int(tmda_26)} veh/día")
     colC.metric("🔭 Proyección 2045", f"{int(tmda_45)} veh/día")
 
-    # --- GRÁFICO (MODIFICADO: SOLO ALERTA FUTURA) ---
+    # --- GRÁFICO ---
     st.subheader("Evolución de la Demanda y Umbrales")
     fig, ax = plt.subplots(figsize=(10, 5))
     
@@ -249,15 +266,11 @@ else:
     
     ax.axhline(5000, color='gray', linestyle=':', alpha=0.5, label='Umbral 5.000')
     
-    # --- LÓGICA DE SATURACIÓN CORREGIDA ---
-    # Solo buscamos saturación DESDE 2024 EN ADELANTE
-    # Ignoramos si se saturó en 2017 si hoy está bajo norma
+    # Lógica de Saturación (Solo Futuro)
     anio_saturacion = None
     val_saturacion = None
-    
-    # Combinamos para buscar, pero filtramos años >= 2024
     full_vals = pd.concat([serie, pred])
-    solo_futuro = full_vals[full_vals.index >= 2024] # <--- FILTRO CLAVE
+    solo_futuro = full_vals[full_vals.index >= 2024]
     
     for y in solo_futuro.index:
         if solo_futuro[y] >= 5000:
@@ -267,13 +280,10 @@ else:
     
     if anio_saturacion is not None:
         ax.scatter([anio_saturacion], [val_saturacion], color='red', s=150, zorder=15, edgecolors='white')
-        
-        # Ajustamos texto según si es HOY (2024) o FUTURO
         if anio_saturacion == 2024:
              texto_sat = f"¡SATURADO HOY!\n(Año 2024)"
         else:
              texto_sat = f"¡SATURACIÓN!\nAño {int(anio_saturacion)}"
-             
         offset_y = 600 if val_saturacion < 10000 else -1500
         ax.annotate(texto_sat, xy=(anio_saturacion, val_saturacion), 
                     xytext=(anio_saturacion, val_saturacion + offset_y),
@@ -295,35 +305,68 @@ else:
         df_tabla['Crecimiento (%)'] = df_tabla['Crecimiento (%)'].apply(lambda x: f"{x:.2f}%")
         st.table(df_tabla)
 
-    # --- DIAGNÓSTICO CORREGIDO ---
-    st.subheader("📋 Diagnóstico Técnico y Recomendaciones")
+    # --- SECCIÓN FINAL: DIAGNÓSTICO + CRITERIOS ---
+    st.subheader("📋 Diagnóstico Técnico y Criterios de Diseño")
     
-    carpeta_up = carpeta.upper()
-    calzada_up = calzada_info.upper()
-    es_no_pavimentado = any(x in carpeta_up for x in ["TIERRA", "RIPIO", "GRAVA", "SUELO"])
-    es_pavimentado = not es_no_pavimentado
-    es_doble_via = "DOBLE" in calzada_up or "DOBLE" in carpeta_up
+    # Dividimos en 2 columnas: Diagnóstico (Izquierda) y Tabla Referencia (Derecha)
+    col_diag, col_crit = st.columns([1.3, 1])
 
-    if es_no_pavimentado:
-        if tmda_24 > 300:
-            st.error(f"🔴 **PRIORIDAD ALTA:** Camino granular con {int(tmda_24)} veh/día. Supera norma. **Se recomienda Pavimentación.**")
-        else:
-            st.success(f"🟢 **CONSERVACIÓN:** Tránsito bajo ({int(tmda_24)} veh/día). Mantener perfilado.")
-            
-    elif es_pavimentado:
-        if not es_doble_via:
-            # 1. ¿Está saturado HOY (2024)?
-            if tmda_24 > 5000:
-                st.error(f"🔴 **SATURACIÓN VIGENTE (2024):** Vía simple con {int(tmda_24)} veh/día. Supera capacidad actual. **Se sugiere Estudio de Segunda Calzada.**")
-            
-            # 2. ¿Se saturará en el FUTURO? (Ignoramos el pasado 2017)
-            elif anio_saturacion and anio_saturacion > 2024:
-                st.warning(f"🟡 **ALERTA:** Se proyecta saturación para el año {anio_saturacion}. **Planificar ampliación antes de esa fecha.**")
-                
+    with col_diag:
+        st.markdown("#### 📢 Estado del Proyecto")
+        
+        carpeta_up = carpeta.upper()
+        calzada_up = calzada_info.upper()
+        es_no_pavimentado = any(x in carpeta_up for x in ["TIERRA", "RIPIO", "GRAVA", "SUELO"])
+        es_pavimentado = not es_no_pavimentado
+        es_doble_via = "DOBLE" in calzada_up or "DOBLE" in carpeta_up
+
+        if es_no_pavimentado:
+            if tmda_24 > 300:
+                st.error(f"🔴 **PRIORIDAD ALTA:** Camino granular con {int(tmda_24)} veh/día. Supera norma (300). **Se recomienda Pavimentación.**")
             else:
-                st.success("🟢 **OPERACIÓN NORMAL:** Capacidad suficiente durante todo el periodo de proyección.")
-        else:
-            st.success("🟢 **ESTÁNDAR ADECUADO:** Doble Calzada acorde al flujo.")
+                st.success(f"🟢 **CONSERVACIÓN:** Tránsito bajo ({int(tmda_24)} veh/día). Mantener perfilado.")
+                
+        elif es_pavimentado:
+            if not es_doble_via:
+                if tmda_24 > 5000:
+                    st.error(f"🔴 **SATURACIÓN VIGENTE (2024):** Vía simple con {int(tmda_24)} veh/día. Supera capacidad. **Se sugiere Estudio de Segunda Calzada.**")
+                elif anio_saturacion and anio_saturacion > 2024:
+                    st.warning(f"🟡 **ALERTA FUTURA:** Se proyecta saturación para el año {anio_saturacion}. **Planificar ampliación antes de esa fecha.**")
+                else:
+                    st.success("🟢 **OPERACIÓN NORMAL:** Capacidad suficiente durante todo el periodo de proyección.")
+            else:
+                st.success("🟢 **ESTÁNDAR ADECUADO:** Doble Calzada acorde al flujo.")
+
+    with col_crit:
+        st.markdown("#### 📏 Referencia Manual de Carreteras (Vol. 3)")
+        st.markdown("""
+        <table class="ref-table">
+            <thead>
+                <tr>
+                    <th>TMDA (veh/día)</th>
+                    <th>Categoría</th>
+                    <th>Intervención Sugerida</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><b>&lt; 300</b></td>
+                    <td>Tránsito Bajo</td>
+                    <td>Mantener Carpeta Granular</td>
+                </tr>
+                <tr>
+                    <td><b>300 – 5.000</b></td>
+                    <td>Tránsito Medio</td>
+                    <td>Pavimentación (Sello/Asfalto)</td>
+                </tr>
+                <tr>
+                    <td><b>&gt; 5.000</b></td>
+                    <td>Saturación</td>
+                    <td>Estudio de Segunda Calzada</td>
+                </tr>
+            </tbody>
+        </table>
+        """, unsafe_allow_html=True)
 
     st.markdown("<br><hr>", unsafe_allow_html=True)
     st.markdown("<div style='text-align: center; color: #888;'><small>Creado por José Tapia - Tesis Ingeniería Civil</small></div>", unsafe_allow_html=True)
