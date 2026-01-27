@@ -162,12 +162,11 @@ else:
             
             n_anios = a_fin - a_inicio
             if n_anios > 1:
-                # Tasa anual 'r'
+                # Calculamos tasa anual 'r' compuesta
                 if v_inicio > 0:
                     r = (v_fin / v_inicio) ** (1/n_anios) - 1
                 else:
                     r = 0
-                
                 for k in range(1, n_anios):
                     anio_intermedio = a_inicio + k
                     val_intermedio = v_inicio * ((1 + r) ** k)
@@ -176,29 +175,42 @@ else:
         serie_completa[anios_censo[-1]] = datos_reales[anios_censo[-1]]
         serie = pd.Series(serie_completa).sort_index()
         
-        # C. PROYECCIÓN HOLT CON CORRECCIÓN
-        modelo = ExponentialSmoothing(serie, trend='add', seasonal=None, damped_trend=True).fit()
+        # C. PROYECCIÓN HOLT MULTIPLICATIVA AMORTIGUADA (CALIBRADA)
+        try:
+            # AQUÍ ESTÁ EL CAMBIO CLAVE: Trend='mul' y damping_trend=0.92
+            modelo = ExponentialSmoothing(
+                serie, 
+                trend='mul', 
+                seasonal=None, 
+                damped_trend=True
+            ).fit(damping_trend=0.92) # <--- CALIBRACIÓN DEL MODELO (FRENO)
+        except:
+            # Fallback a Aditivo si falla el multiplicativo (por ceros en datos)
+            modelo = ExponentialSmoothing(
+                serie, 
+                trend='add', 
+                seasonal=None, 
+                damped_trend=True
+            ).fit(damping_trend=0.92)
+            
         anios_fut = np.arange(2025, 2046)
         pred_raw = modelo.forecast(len(anios_fut))
         
-        # --- FIX: Aseguramos el índice correcto para evitar KeyError '2025' ---
+        # Aseguramos el índice para evitar errores
         pred_raw = pd.Series(pred_raw.values, index=anios_fut)
-        # --------------------------------------------------------------------
         
-        # --- LOGICA PUNTO 3: CORRECCIÓN DE CRECIMIENTO NEGATIVO ---
+        # --- CORRECCIÓN DE CRECIMIENTO NEGATIVO (Safety Net) ---
         pred_ajustada = []
         ultimo_val_valido = serie.iloc[-1] # Valor 2024
 
         for y in anios_fut:
             val_pred = pred_raw[y]
-            
-            # Si la predicción baja respecto al acumulado anterior, mantenemos el valor (crecimiento 0)
+            # Si el modelo intenta bajar, lo mantenemos plano (Crecimiento 0)
             if val_pred < ultimo_val_valido:
                 val_final = ultimo_val_valido
             else:
                 val_final = val_pred
                 ultimo_val_valido = val_final # Nuevo piso
-            
             pred_ajustada.append(val_final)
 
         pred = pd.Series(pred_ajustada, index=anios_fut)
@@ -207,7 +219,7 @@ else:
         tmda_26 = pred[2026]
         tmda_45 = pred[2045]
         
-        # D. CÁLCULO DE TASAS PROMEDIO ANUALES
+        # D. CÁLCULO DE TASAS PROMEDIO
         if tmda_24 > 0 and tmda_26 > 0:
             tasa_24_26 = ((tmda_26 / tmda_24) ** (1/2) - 1) * 100
         else:
@@ -219,12 +231,11 @@ else:
             tasa_26_45 = 0
 
     except Exception as e:
-        st.error(f"Error matemático detallado: {e}")
+        st.error(f"Error en el modelo matemático: {e}")
         st.stop()
 
     # --- KPI SUPERIORES ---
     st.markdown("<br>", unsafe_allow_html=True)
-    
     st.markdown(f"""
         <div class='rate-box'>
             📊 Tasa Promedio Anual (2024-2026): <b>{tasa_24_26:.2f}%</b> &nbsp;|&nbsp; 
@@ -241,22 +252,26 @@ else:
     st.subheader("Evolución de la Demanda y Umbrales")
     fig, ax = plt.subplots(figsize=(10, 5))
     
+    # Separar datos para colores
     x_interp = [a for a in serie.index if a not in anios_censo]
     y_interp = [serie[a] for a in x_interp]
     x_real = anios_censo
     y_real = [serie[a] for a in x_real if a in serie.index]
     
+    # Graficar
     ax.plot(serie.index, serie.values, '-', color='gray', alpha=0.4, linewidth=1)
     ax.scatter(x_interp, y_interp, color='#fd7e14', s=40, label='Interpolado (Geométrico)', zorder=5)
     ax.scatter(x_real, y_real, color='black', s=60, label='Censo Oficial', zorder=10)
     
-    ax.plot(pred.index, pred.values, '--', color='#2ca02c', linewidth=2, label='Proyección (Ajustada)')
+    # Proyección Curva
+    ax.plot(pred.index, pred.values, '--', color='#2ca02c', linewidth=2, label='Proyección (Holt Multiplicativo)')
     ax.axhline(5000, color='gray', linestyle=':', alpha=0.5, label='Umbral 5.000')
     
+    # Saturación
     anio_saturacion = None
     val_saturacion = None
-    
     full_series = pd.concat([serie, pred])
+    
     for y in full_series.index:
         if full_series[y] >= 5000:
             anio_saturacion = y
@@ -294,7 +309,6 @@ else:
     
     carpeta_up = carpeta.upper()
     calzada_up = calzada_info.upper()
-    
     es_no_pavimentado = any(x in carpeta_up for x in ["TIERRA", "RIPIO", "GRAVA", "SUELO"])
     es_pavimentado = not es_no_pavimentado
     es_doble_via = "DOBLE" in calzada_up or "DOBLE" in carpeta_up
