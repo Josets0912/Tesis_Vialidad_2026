@@ -173,41 +173,68 @@ else:
     serie_completa[anios_censo[-1]] = datos_reales[anios_censo[-1]]
     serie = pd.Series(serie_completa).sort_index()
     
-    # C. PROYECCIÓN HOLT (CON UNIÓN VISUAL)
-    # Usamos el modelo Multiplicativo Amortiguado (Calibrado)
+    # C. PROYECCIÓN HOLT CON ANCLAJE DE CONTINUIDAD
+    # ---------------------------------------------
     try:
-        modelo = ExponentialSmoothing(
-            serie, 
-            trend='mul', 
-            seasonal=None, 
-            damped_trend=True
-        ).fit(damping_trend=0.92)
-    except:
-        modelo = ExponentialSmoothing(
-            serie, 
-            trend='add', 
-            seasonal=None, 
-            damped_trend=True
-        ).fit(damping_trend=0.92)
+        # 1. Ajustamos el modelo (intentamos curva, si falla, recta)
+        try:
+            modelo = ExponentialSmoothing(
+                serie, 
+                trend='mul', 
+                seasonal=None, 
+                damped_trend=True
+            ).fit(damping_trend=0.92)
+        except:
+            modelo = ExponentialSmoothing(
+                serie, 
+                trend='add', 
+                seasonal=None, 
+                damped_trend=True
+            ).fit(damping_trend=0.92)
+            
+        anios_fut = np.arange(2025, 2046)
+        pred_raw = modelo.forecast(len(anios_fut))
+        pred_raw = pd.Series(pred_raw.values, index=anios_fut)
         
-    anios_fut = np.arange(2025, 2046)
-    pred_raw = modelo.forecast(len(anios_fut))
-    pred_raw = pd.Series(pred_raw.values, index=anios_fut)
-    
-    # --- CORRECCIÓN DE CRECIMIENTO NEGATIVO ---
-    pred_ajustada = []
-    ultimo_val_valido = serie.iloc[-1] # Valor 2024
-
-    for y in anios_fut:
-        val_pred = pred_raw[y]
-        if val_pred < ultimo_val_valido:
-            val_final = ultimo_val_valido
+        # 2. ALGORITMO DE ANCLAJE (Corrección del Salto)
+        # Calculamos cuánto quería crecer el modelo el primer año
+        if pred_raw.iloc[0] > 0 and pred_raw.iloc[1] > 0:
+            tasa_crecimiento_inicial = pred_raw.iloc[1] / pred_raw.iloc[0]
         else:
-            val_final = val_pred
-            ultimo_val_valido = val_final
-        pred_ajustada.append(val_final)
+            tasa_crecimiento_inicial = 1.0 # Si falla, asumimos plano
+            
+        # Definimos el punto de partida teórico del modelo para 2024
+        # (Es decir, de dónde "cree" el modelo que viene para dar el salto)
+        base_teorica_modelo = pred_raw.iloc[0] / tasa_crecimiento_inicial
+        
+        # Factor de Corrección: Relación entre la Realidad (2024) y la Alucinación del Modelo
+        ultimo_real = serie.iloc[-1]
+        if base_teorica_modelo > 0:
+            factor_ajuste = ultimo_real / base_teorica_modelo
+        else:
+            factor_ajuste = 1.0
+            
+        # Aplicamos el factor a toda la curva futura
+        # Esto "baja" la curva verde para que conecte perfecto con el punto negro
+        pred_escalada = pred_raw * factor_ajuste
+        
+        # 3. SAFETY NET (Anti-caídas)
+        pred_ajustada = []
+        piso = ultimo_real 
 
-    pred = pd.Series(pred_ajustada, index=anios_fut)
+        for y in anios_fut:
+            val = pred_escalada[y]
+            if val < piso:
+                val = piso # No permitimos que baje de lo que ya hay
+            else:
+                piso = val # Actualizamos el piso si sube
+            pred_ajustada.append(val)
+
+        pred = pd.Series(pred_ajustada, index=anios_fut)
+
+    except Exception as e:
+        st.error(f"Error de cálculo: {e}")
+        st.stop()
     
     tmda_24 = serie[2024]
     tmda_26 = pred[2026]
@@ -252,13 +279,12 @@ else:
     ax.scatter(x_interp, y_interp, color='#fd7e14', s=40, label='Interpolado (Geométrico)', zorder=5)
     ax.scatter(x_real, y_real, color='black', s=60, label='Censo Oficial', zorder=10)
     
-    # 2. Proyección (UNIDA AL 2024)
-    # Aquí creamos una lista que INCLUYE el 2024 para que la línea nazca de ahí
+    # 2. Proyección (UNIDA AL 2024 CON ESTILO FINO)
     x_proyeccion = [2024] + list(pred.index)
     y_proyeccion = [serie[2024]] + list(pred.values)
     
-    # Graficamos la línea verde con marcadores pequeños para ver 2025, 2026...
-    ax.plot(x_proyeccion, y_proyeccion, '--.', color='#2ca02c', linewidth=2, markersize=8, label='Proyección (Ajustada)')
+    # Graficamos la línea verde con marcadores pequeños y línea fina
+    ax.plot(x_proyeccion, y_proyeccion, '--.', color='#2ca02c', linewidth=1, markersize=4, label='Proyección (Holt Multiplicativo)')
     
     ax.axhline(5000, color='gray', linestyle=':', alpha=0.5, label='Umbral 5.000')
     
