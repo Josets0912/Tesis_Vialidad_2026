@@ -24,36 +24,42 @@ def cargar_datos():
         df = pd.read_excel(archivo)
         
         # LIMPIEZA DE DATOS
-        cols_limpiar = ['ROL', 'ROL NUEVO', 'NOMBRE DEL CAMINO', 'TIPO DE CARPETA', 'CLASIFICACIÓN', 'ESTACIÓN', 'CALZADA']
+        # Agregamos 'Sector' a la lista de limpieza
+        cols_limpiar = ['ROL', 'ROL NUEVO', 'NOMBRE DEL CAMINO', 'Sector', 'TIPO DE CARPETA', 'CLASIFICACIÓN', 'ESTACIÓN', 'CALZADA']
         for col in cols_limpiar:
             if col in df.columns:
                 df[col] = df[col].astype(str).str.strip()
         
         # CORRECCIÓN 115 CANALES
         errores_115 = ['115 Canales', '115 CANALES', '115-Canales', '115 CH', '115-CH']
-        df['ROL'] = df['ROL'].replace(errores_115, 'Ruta 115 CH')
-        df['ROL NUEVO'] = df['ROL NUEVO'].replace(errores_115, 'Ruta 115 CH')
+        if 'ROL' in df.columns: df['ROL'] = df['ROL'].replace(errores_115, 'Ruta 115 CH')
+        if 'ROL NUEVO' in df.columns: df['ROL NUEVO'] = df['ROL NUEVO'].replace(errores_115, 'Ruta 115 CH')
 
         return df
     except FileNotFoundError:
-        st.error(f"❌ Error Crítico: No encuentro el archivo '{archivo}'. Asegúrate de haber ejecutado el script de fusión.")
+        st.error(f"❌ Error Crítico: No encuentro el archivo '{archivo}'. Asegúrate de que esté en la misma carpeta.")
         st.stop()
 
 df = cargar_datos()
 
-# --- 3. MENÚ LATERAL (MODIFICADO: POR ROL OFICIAL) ---
+# --- 3. MENÚ LATERAL (MODIFICADO: NUEVOS NOMBRES) ---
 st.sidebar.header("🔍 Panel de Control")
 
-# CAMBIO CLAVE: Usamos 'ROL NUEVO' para la lista desplegable
-# Esto asegura que aparezcan los nombres oficiales vigentes hoy en día.
+# 1. Selección de Rol Oficial
 roles = sorted(df['ROL NUEVO'].unique())
 rol_sel = st.sidebar.selectbox("Seleccione Rol Oficial:", roles)
 
-# Filtramos el dataframe usando la columna 'ROL NUEVO'
+# 2. Filtro por Rol
 df_rol = df[df['ROL NUEVO'] == rol_sel]
 
-df_rol['ETIQUETA'] = df_rol['NOMBRE DEL CAMINO'] + " (" + df_rol['ESTACIÓN'] + ")"
-tramo_sel = st.sidebar.selectbox("Seleccione Sector:", df_rol['ETIQUETA'].tolist())
+# 3. Selección de Sector (USANDO LA NUEVA COLUMNA 'Sector')
+# Creamos una etiqueta clara: Nombre del Sector + [Código Estación]
+df_rol['ETIQUETA_SELECTOR'] = df_rol['Sector'] + " [" + df_rol['ESTACIÓN'] + "]"
+
+# Ordenamos por estación para mantener el orden lógico del camino
+df_rol = df_rol.sort_values(by='ESTACIÓN')
+
+sector_sel = st.sidebar.selectbox("Seleccione Sector Específico:", df_rol['ETIQUETA_SELECTOR'].tolist())
 
 st.sidebar.markdown("---")
 btn_calc = st.sidebar.button("Generar Informe Técnico 🚀")
@@ -79,7 +85,7 @@ st.markdown("""
         letter-spacing: 0.5px;
     }
     .info-value {
-        font-size: 15px;
+        font-size: 14px;
         color: #212529;
         font-weight: 600;
         line-height: 1.4;
@@ -144,28 +150,33 @@ else:
     st.markdown("### 🚧 Sistema de Gestión de Pavimentos y Proyección de Demanda")
     st.markdown("---")
 
-    # Datos
-    fila = df_rol[df_rol['ETIQUETA'] == tramo_sel].iloc[0]
-    nombre = fila['NOMBRE DEL CAMINO']
+    # Recuperamos la fila seleccionada
+    fila = df_rol[df_rol['ETIQUETA_SELECTOR'] == sector_sel].iloc[0]
+    
+    # NOMBRES ACTUALIZADOS
+    nombre_sector = fila['Sector']          # Ej: RETIRO - VILLASECA (HACIA COPIHUE)
+    nombre_oficial = fila['NOMBRE DEL CAMINO'] # Ej: Cruce Ruta 5 - Retiro...
+    
     rol_oficial = fila['ROL NUEVO']
     carpeta = fila['TIPO DE CARPETA']
     clasificacion = fila['CLASIFICACIÓN']
     calzada_info = fila['CALZADA'] if 'CALZADA' in fila else "No Inf"
     
-    st.title(f"📍 {nombre}")
+    # Título Principal: Ahora es el SECTOR ESPECÍFICO
+    st.title(f"📍 {nombre_sector}")
     
-    # Tarjetas HTML
+    # Tarjetas de Información
     c1, c2, c3, c4 = st.columns(4)
     with c1:
-        st.markdown(f"<div class='info-card'><div class='info-label'>Rol Oficial</div><div class='info-value'>{rol_oficial}</div></div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='info-card'><div class='info-label'>Nombre Oficial</div><div class='info-value'>{nombre_oficial}</div></div>", unsafe_allow_html=True)
     with c2:
-        st.markdown(f"<div class='info-card'><div class='info-label'>Tipo de Carpeta</div><div class='info-value'>{carpeta}</div></div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='info-card'><div class='info-label'>Rol / Carpeta</div><div class='info-value'>{rol_oficial}<br>{carpeta}</div></div>", unsafe_allow_html=True)
     with c3:
         st.markdown(f"<div class='info-card'><div class='info-label'>Clasificación</div><div class='info-value'>{clasificacion}</div></div>", unsafe_allow_html=True)
     with c4:
         st.markdown(f"<div class='info-card'><div class='info-label'>Calzada</div><div class='info-value'>{calzada_info}</div></div>", unsafe_allow_html=True)
     
-    # --- CÁLCULOS MATEMÁTICOS ---
+    # --- CÁLCULOS MATEMÁTICOS (SIN CAMBIOS, SOLO LÓGICA) ---
     # A. Datos Históricos
     anios_censo = [2015, 2017, 2018, 2020, 2022, 2024]
     vals_censo = fila[[f'TMDA {a}' for a in anios_censo]].values.flatten().astype(float)
@@ -225,7 +236,7 @@ else:
         pred = pd.Series(pred_ajustada, index=anios_fut)
 
     except Exception as e:
-        st.error(f"Error: {e}")
+        st.error(f"Error en proyección: {e}")
         st.stop()
     
     tmda_24 = serie[2024]
@@ -250,7 +261,7 @@ else:
     colB.metric("📈 Proyección 2026", f"{int(tmda_26)} veh/día")
     colC.metric("🔭 Proyección 2045", f"{int(tmda_45)} veh/día")
 
-    # --- GRÁFICO (MODIFICADO: SOLO ALERTA FUTURA) ---
+    # --- GRÁFICO ---
     st.subheader("Evolución de la Demanda y Umbrales")
     fig, ax = plt.subplots(figsize=(10, 5))
     
@@ -271,7 +282,7 @@ else:
     
     ax.axhline(5000, color='gray', linestyle=':', alpha=0.5, label='Umbral 5.000')
     
-    # Lógica de Saturación (Solo Futuro)
+    # Lógica de Saturación
     anio_saturacion = None
     val_saturacion = None
     full_vals = pd.concat([serie, pred])
@@ -286,9 +297,9 @@ else:
     if anio_saturacion is not None:
         ax.scatter([anio_saturacion], [val_saturacion], color='red', s=150, zorder=15, edgecolors='white')
         if anio_saturacion == 2024:
-             texto_sat = f"¡SATURADO HOY!\n(Año 2024)"
+              texto_sat = f"¡SATURADO HOY!\n(Año 2024)"
         else:
-             texto_sat = f"¡SATURACIÓN!\nAño {int(anio_saturacion)}"
+              texto_sat = f"¡SATURACIÓN!\nAño {int(anio_saturacion)}"
         offset_y = 600 if val_saturacion < 10000 else -1500
         ax.annotate(texto_sat, xy=(anio_saturacion, val_saturacion), 
                     xytext=(anio_saturacion, val_saturacion + offset_y),
