@@ -24,7 +24,6 @@ def cargar_datos():
         df = pd.read_excel(archivo)
         
         # LIMPIEZA DE DATOS
-        # Agregamos 'Sector' a la lista de limpieza
         cols_limpiar = ['ROL', 'ROL NUEVO', 'NOMBRE DEL CAMINO', 'Sector', 'TIPO DE CARPETA', 'CLASIFICACIÓN', 'ESTACIÓN', 'CALZADA']
         for col in cols_limpiar:
             if col in df.columns:
@@ -42,7 +41,7 @@ def cargar_datos():
 
 df = cargar_datos()
 
-# --- 3. MENÚ LATERAL (MODIFICADO: NUEVOS NOMBRES) ---
+# --- 3. MENÚ LATERAL ---
 st.sidebar.header("🔍 Panel de Control")
 
 # 1. Selección de Rol Oficial
@@ -52,13 +51,9 @@ rol_sel = st.sidebar.selectbox("Seleccione Rol Oficial:", roles)
 # 2. Filtro por Rol
 df_rol = df[df['ROL NUEVO'] == rol_sel]
 
-# 3. Selección de Sector (USANDO LA NUEVA COLUMNA 'Sector')
-# Creamos una etiqueta clara: Nombre del Sector + [Código Estación]
+# 3. Selección de Sector
 df_rol['ETIQUETA_SELECTOR'] = df_rol['Sector'] + " [" + df_rol['ESTACIÓN'] + "]"
-
-# Ordenamos por estación para mantener el orden lógico del camino
 df_rol = df_rol.sort_values(by='ESTACIÓN')
-
 sector_sel = st.sidebar.selectbox("Seleccione Sector Específico:", df_rol['ETIQUETA_SELECTOR'].tolist())
 
 st.sidebar.markdown("---")
@@ -90,6 +85,13 @@ st.markdown("""
         font-weight: 600;
         line-height: 1.4;
         word-wrap: break-word;
+    }
+    .subtitle-sector {
+        color: #1f77b4;
+        font-weight: 600;
+        font-size: 22px;
+        margin-top: -15px;
+        margin-bottom: 20px;
     }
     .rate-box {
         background-color: #e8f4f8;
@@ -153,36 +155,38 @@ else:
     # Recuperamos la fila seleccionada
     fila = df_rol[df_rol['ETIQUETA_SELECTOR'] == sector_sel].iloc[0]
     
-    # NOMBRES ACTUALIZADOS
-    nombre_sector = fila['Sector']          # Ej: RETIRO - VILLASECA (HACIA COPIHUE)
-    nombre_oficial = fila['NOMBRE DEL CAMINO'] # Ej: Cruce Ruta 5 - Retiro...
-    
+    # DATOS IDENTIFICACIÓN
+    nombre_sector = fila['Sector']
+    nombre_oficial = fila['NOMBRE DEL CAMINO']
     rol_oficial = fila['ROL NUEVO']
     carpeta = fila['TIPO DE CARPETA']
     clasificacion = fila['CLASIFICACIÓN']
     calzada_info = fila['CALZADA'] if 'CALZADA' in fila else "No Inf"
     
-    # Título Principal: Ahora es el SECTOR ESPECÍFICO
-    st.title(f"📍 {nombre_sector}")
+    # --- CAMBIO DE JERARQUÍA VISUAL ---
+    # 1. Título Principal: Nombre Oficial del Camino
+    st.markdown(f"# 🛣️ {nombre_oficial}")
     
-    # Tarjetas de Información
+    # 2. Subtítulo: El Sector Específico (Clase CSS personalizada)
+    st.markdown(f"<div class='subtitle-sector'>📍 Sector: {nombre_sector}</div>", unsafe_allow_html=True)
+    
+    # 3. Tarjetas de Información Técnica
     c1, c2, c3, c4 = st.columns(4)
     with c1:
-        st.markdown(f"<div class='info-card'><div class='info-label'>Nombre Oficial</div><div class='info-value'>{nombre_oficial}</div></div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='info-card'><div class='info-label'>Rol Oficial</div><div class='info-value'>{rol_oficial}</div></div>", unsafe_allow_html=True)
     with c2:
-        st.markdown(f"<div class='info-card'><div class='info-label'>Rol / Carpeta</div><div class='info-value'>{rol_oficial}<br>{carpeta}</div></div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='info-card'><div class='info-label'>Tipo de Carpeta</div><div class='info-value'>{carpeta}</div></div>", unsafe_allow_html=True)
     with c3:
         st.markdown(f"<div class='info-card'><div class='info-label'>Clasificación</div><div class='info-value'>{clasificacion}</div></div>", unsafe_allow_html=True)
     with c4:
         st.markdown(f"<div class='info-card'><div class='info-label'>Calzada</div><div class='info-value'>{calzada_info}</div></div>", unsafe_allow_html=True)
     
-    # --- CÁLCULOS MATEMÁTICOS (SIN CAMBIOS, SOLO LÓGICA) ---
-    # A. Datos Históricos
+    # --- CÁLCULOS MATEMÁTICOS ---
     anios_censo = [2015, 2017, 2018, 2020, 2022, 2024]
     vals_censo = fila[[f'TMDA {a}' for a in anios_censo]].values.flatten().astype(float)
     datos_reales = pd.Series(vals_censo, index=anios_censo).sort_index()
     
-    # B. Interpolación
+    # Interpolación
     serie_completa = {}
     for i in range(len(anios_censo) - 1):
         a_inicio = anios_censo[i]
@@ -201,7 +205,7 @@ else:
     serie_completa[anios_censo[-1]] = datos_reales[anios_censo[-1]]
     serie = pd.Series(serie_completa).sort_index()
     
-    # C. Proyección Holt (Con Anclaje)
+    # Proyección Holt
     try:
         try:
             modelo = ExponentialSmoothing(serie, trend='mul', seasonal=None, damped_trend=True).fit(damping_trend=0.92)
@@ -212,7 +216,7 @@ else:
         pred_raw = modelo.forecast(len(anios_fut))
         pred_raw = pd.Series(pred_raw.values, index=anios_fut)
         
-        # Anclaje
+        # Anclaje y Ajuste
         if pred_raw.iloc[0] > 0 and pred_raw.iloc[1] > 0:
             tasa_crecimiento_inicial = pred_raw.iloc[1] / pred_raw.iloc[0]
         else:
