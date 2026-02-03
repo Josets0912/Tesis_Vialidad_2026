@@ -19,20 +19,24 @@ st.set_page_config(
 # --- 2. CARGA DE DATOS ---
 @st.cache_data
 def cargar_datos():
-    archivo = "DATA_MAESTRA_TESIS.xlsx"
+    # Asegúrate que este sea el nombre de tu archivo final
+    archivo = "DATA_MAESTRA_TESIS.xlsx" 
     try:
         df = pd.read_excel(archivo)
         
         # LIMPIEZA DE DATOS
-        cols_limpiar = ['ROL', 'ROL NUEVO', 'NOMBRE DEL CAMINO', 'Sector', 'TIPO DE CARPETA', 'CLASIFICACIÓN', 'ESTACIÓN', 'CALZADA']
+        # OJO: Agregué 'Especificación del Sector' a la limpieza para que no de error si hay espacios
+        cols_limpiar = ['ROL', 'ROL NUEVO', 'NOMBRE DEL CAMINO', 'Especificación del Sector', 'TIPO DE CARPETA', 'CLASIFICACIÓN', 'ESTACIÓN', 'CALZADA']
         for col in cols_limpiar:
             if col in df.columns:
                 df[col] = df[col].astype(str).str.strip()
         
         # CORRECCIÓN 115 CANALES
         errores_115 = ['115 Canales', '115 CANALES', '115-Canales', '115 CH', '115-CH']
-        if 'ROL' in df.columns: df['ROL'] = df['ROL'].replace(errores_115, 'Ruta 115 CH')
-        if 'ROL NUEVO' in df.columns: df['ROL NUEVO'] = df['ROL NUEVO'].replace(errores_115, 'Ruta 115 CH')
+        if 'ROL' in df.columns:
+            df['ROL'] = df['ROL'].replace(errores_115, 'Ruta 115 CH')
+        if 'ROL NUEVO' in df.columns:
+            df['ROL NUEVO'] = df['ROL NUEVO'].replace(errores_115, 'Ruta 115 CH')
 
         return df
     except FileNotFoundError:
@@ -44,17 +48,16 @@ df = cargar_datos()
 # --- 3. MENÚ LATERAL ---
 st.sidebar.header("🔍 Panel de Control")
 
-# 1. Selección de Rol Oficial
+# Selector de Rol Oficial
 roles = sorted(df['ROL NUEVO'].unique())
 rol_sel = st.sidebar.selectbox("Seleccione Rol Oficial:", roles)
 
-# 2. Filtro por Rol
+# Filtramos por Rol
 df_rol = df[df['ROL NUEVO'] == rol_sel]
 
-# 3. Selección de Sector
-df_rol['ETIQUETA_SELECTOR'] = df_rol['Sector'] + " [" + df_rol['ESTACIÓN'] + "]"
-df_rol = df_rol.sort_values(by='ESTACIÓN')
-sector_sel = st.sidebar.selectbox("Seleccione Sector Específico:", df_rol['ETIQUETA_SELECTOR'].tolist())
+# Creamos una etiqueta amigable para el selector: "Nombre Camino (Estación X)"
+df_rol['ETIQUETA'] = df_rol['NOMBRE DEL CAMINO'] + " (" + df_rol['ESTACIÓN'] + ")"
+tramo_sel = st.sidebar.selectbox("Seleccione Sector:", df_rol['ETIQUETA'].tolist())
 
 st.sidebar.markdown("---")
 btn_calc = st.sidebar.button("Generar Informe Técnico 🚀")
@@ -80,18 +83,11 @@ st.markdown("""
         letter-spacing: 0.5px;
     }
     .info-value {
-        font-size: 14px;
+        font-size: 15px;
         color: #212529;
         font-weight: 600;
         line-height: 1.4;
         word-wrap: break-word;
-    }
-    .subtitle-sector {
-        color: #1f77b4;
-        font-weight: 600;
-        font-size: 22px;
-        margin-top: -15px;
-        margin-bottom: 20px;
     }
     .rate-box {
         background-color: #e8f4f8;
@@ -100,6 +96,13 @@ st.markdown("""
         border-left: 5px solid #17a2b8;
         margin-bottom: 15px;
         color: #0c5460;
+        font-weight: 500;
+    }
+    .subtitle-sector {
+        color: #555;
+        font-size: 20px;
+        margin-top: -20px;
+        margin-bottom: 20px;
         font-weight: 500;
     }
     .ref-table {
@@ -152,25 +155,24 @@ else:
     st.markdown("### 🚧 Sistema de Gestión de Pavimentos y Proyección de Demanda")
     st.markdown("---")
 
-    # Recuperamos la fila seleccionada
-    fila = df_rol[df_rol['ETIQUETA_SELECTOR'] == sector_sel].iloc[0]
+    # Datos
+    fila = df_rol[df_rol['ETIQUETA'] == tramo_sel].iloc[0]
     
-    # DATOS IDENTIFICACIÓN
-    nombre_sector = fila['Sector']
-    nombre_oficial = fila['NOMBRE DEL CAMINO']
+    nombre = fila['NOMBRE DEL CAMINO']
+    # Aquí obtenemos el sector específico que arreglamos en la data maestra
+    # Si por alguna razón la columna no existe, pone un texto por defecto
+    sector_especifico = fila['Especificación del Sector'] if 'Especificación del Sector' in fila else "Sector No Especificado"
+    
     rol_oficial = fila['ROL NUEVO']
     carpeta = fila['TIPO DE CARPETA']
     clasificacion = fila['CLASIFICACIÓN']
     calzada_info = fila['CALZADA'] if 'CALZADA' in fila else "No Inf"
     
-    # --- CAMBIO DE JERARQUÍA VISUAL ---
-    # 1. Título Principal: Nombre Oficial del Camino
-    st.markdown(f"# 🛣️ {nombre_oficial}")
+    # Título y Subtítulo del Sector
+    st.title(f"📍 {nombre}")
+    st.markdown(f"<div class='subtitle-sector'>Sector: {sector_especifico}</div>", unsafe_allow_html=True)
     
-    # 2. Subtítulo: El Sector Específico (Clase CSS personalizada)
-    st.markdown(f"<div class='subtitle-sector'>📍 Sector: {nombre_sector}</div>", unsafe_allow_html=True)
-    
-    # 3. Tarjetas de Información Técnica
+    # Tarjetas de Información
     c1, c2, c3, c4 = st.columns(4)
     with c1:
         st.markdown(f"<div class='info-card'><div class='info-label'>Rol Oficial</div><div class='info-value'>{rol_oficial}</div></div>", unsafe_allow_html=True)
@@ -182,11 +184,12 @@ else:
         st.markdown(f"<div class='info-card'><div class='info-label'>Calzada</div><div class='info-value'>{calzada_info}</div></div>", unsafe_allow_html=True)
     
     # --- CÁLCULOS MATEMÁTICOS ---
+    # A. Datos Históricos
     anios_censo = [2015, 2017, 2018, 2020, 2022, 2024]
     vals_censo = fila[[f'TMDA {a}' for a in anios_censo]].values.flatten().astype(float)
     datos_reales = pd.Series(vals_censo, index=anios_censo).sort_index()
     
-    # Interpolación
+    # B. Interpolación
     serie_completa = {}
     for i in range(len(anios_censo) - 1):
         a_inicio = anios_censo[i]
@@ -205,7 +208,7 @@ else:
     serie_completa[anios_censo[-1]] = datos_reales[anios_censo[-1]]
     serie = pd.Series(serie_completa).sort_index()
     
-    # Proyección Holt
+    # C. Proyección Holt (Con Anclaje)
     try:
         try:
             modelo = ExponentialSmoothing(serie, trend='mul', seasonal=None, damped_trend=True).fit(damping_trend=0.92)
@@ -216,7 +219,7 @@ else:
         pred_raw = modelo.forecast(len(anios_fut))
         pred_raw = pd.Series(pred_raw.values, index=anios_fut)
         
-        # Anclaje y Ajuste
+        # Anclaje
         if pred_raw.iloc[0] > 0 and pred_raw.iloc[1] > 0:
             tasa_crecimiento_inicial = pred_raw.iloc[1] / pred_raw.iloc[0]
         else:
@@ -227,7 +230,7 @@ else:
         factor_ajuste = ultimo_real / base_teorica_modelo if base_teorica_modelo > 0 else 1.0
         pred_escalada = pred_raw * factor_ajuste
         
-        # Safety Net
+        # Safety Net (No bajar del último real)
         pred_ajustada = []
         piso = ultimo_real 
         for y in anios_fut:
@@ -240,14 +243,14 @@ else:
         pred = pd.Series(pred_ajustada, index=anios_fut)
 
     except Exception as e:
-        st.error(f"Error en proyección: {e}")
+        st.error(f"Error en el cálculo: {e}")
         st.stop()
     
     tmda_24 = serie[2024]
     tmda_26 = pred[2026]
     tmda_45 = pred[2045]
     
-    # Tasas
+    # Tasas Proyectadas (para KPI)
     tasa_24_26 = ((tmda_26 / tmda_24) ** (1/2) - 1) * 100 if tmda_24 > 0 and tmda_26 > 0 else 0
     tasa_26_45 = ((tmda_45 / tmda_26) ** (1/19) - 1) * 100 if tmda_26 > 0 and tmda_45 > 0 else 0
 
@@ -286,7 +289,7 @@ else:
     
     ax.axhline(5000, color='gray', linestyle=':', alpha=0.5, label='Umbral 5.000')
     
-    # Lógica de Saturación
+    # Lógica de Saturación (Solo Futuro)
     anio_saturacion = None
     val_saturacion = None
     full_vals = pd.concat([serie, pred])
@@ -301,9 +304,9 @@ else:
     if anio_saturacion is not None:
         ax.scatter([anio_saturacion], [val_saturacion], color='red', s=150, zorder=15, edgecolors='white')
         if anio_saturacion == 2024:
-              texto_sat = f"¡SATURADO HOY!\n(Año 2024)"
+             texto_sat = f"¡SATURADO HOY!\n(Año 2024)"
         else:
-              texto_sat = f"¡SATURACIÓN!\nAño {int(anio_saturacion)}"
+             texto_sat = f"¡SATURACIÓN!\nAño {int(anio_saturacion)}"
         offset_y = 600 if val_saturacion < 10000 else -1500
         ax.annotate(texto_sat, xy=(anio_saturacion, val_saturacion), 
                     xytext=(anio_saturacion, val_saturacion + offset_y),
@@ -316,7 +319,46 @@ else:
     ax.grid(True, alpha=0.3)
     st.pyplot(fig)
 
-    with st.expander("📄 Ver Tabla de Proyección de Tránsito y Crecimiento", expanded=False):
+    # --- NUEVA SECCIÓN SOLICITADA POR EL PROFESOR ---
+    with st.expander("📅 Ver Histórico de Tránsito y Tasas Reales (2015-2024)", expanded=False):
+        st.write("Calculado a partir de los Censos disponibles:")
+        
+        # 1. Crear dataframe con los datos históricos
+        datos_hist = {
+            'Año': anios_censo,
+            'TMDA Real': vals_censo.astype(int)
+        }
+        df_hist = pd.DataFrame(datos_hist)
+        
+        # 2. Calcular tasa de crecimiento
+        crecimiento = [0.0]
+        for i in range(1, len(df_hist)):
+            v_actual = df_hist.iloc[i]['TMDA Real']
+            v_ant = df_hist.iloc[i-1]['TMDA Real']
+            anio_actual = df_hist.iloc[i]['Año']
+            anio_ant = df_hist.iloc[i-1]['Año']
+            
+            n_anios = anio_actual - anio_ant
+            
+            # Fórmula de interés compuesto
+            if v_ant > 0 and n_anios > 0:
+                tasa = ((v_actual / v_ant) ** (1/n_anios) - 1) * 100
+            else:
+                tasa = 0.0
+            crecimiento.append(tasa)
+            
+        df_hist['Crecimiento Anual (%)'] = crecimiento
+        
+        # 3. Formato visual
+        df_hist['Crecimiento Anual (%)'] = df_hist['Crecimiento Anual (%)'].apply(lambda x: f"{x:.2f}%")
+        df_hist.at[0, 'Crecimiento Anual (%)'] = "-" # Primer año no tiene anterior
+        
+        # Mostramos la tabla transpuesta o normal. Normal suele ser más clara para series temporales.
+        st.table(df_hist.set_index('Año'))
+
+
+    # --- TABLA DE PROYECCIÓN ---
+    with st.expander("📄 Ver Tabla de Proyección Futura (2025-2045)", expanded=False):
         df_tabla = pd.DataFrame({'TMDA Proyectado': pred.values}, index=pred.index)
         serie_completa_calc = pd.concat([pd.Series([tmda_24], index=[2024]), pred])
         crecimiento_pct = serie_completa_calc.pct_change() * 100
