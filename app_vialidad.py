@@ -23,8 +23,7 @@ def cargar_datos():
     try:
         df = pd.read_excel(archivo)
         
-        # --- CORRECCIÓN CLAVE: LIMPIEZA DE COLUMNA 'Sector' ---
-        # Tu archivo tiene la columna llamada 'Sector', así que la usamos directo.
+        # LIMPIEZA DE DATOS (Incluyendo 'Sector')
         cols_limpiar = ['ROL', 'ROL NUEVO', 'NOMBRE DEL CAMINO', 'Sector', 'TIPO DE CARPETA', 'CLASIFICACIÓN', 'ESTACIÓN', 'CALZADA']
         
         for col in cols_limpiar:
@@ -40,7 +39,7 @@ def cargar_datos():
 
         return df
     except FileNotFoundError:
-        st.error(f"❌ Error Crítico: No encuentro el archivo '{archivo}'. Asegúrate de que esté en la misma carpeta que este script.")
+        st.error(f"❌ Error Crítico: No encuentro el archivo '{archivo}'. Asegúrate de que esté en la misma carpeta.")
         st.stop()
 
 df = cargar_datos()
@@ -159,8 +158,7 @@ else:
     fila = df_rol[df_rol['ETIQUETA'] == tramo_sel].iloc[0]
     
     nombre = fila['NOMBRE DEL CAMINO']
-    
-    # --- CORRECCIÓN AQUÍ: Usamos 'Sector' directamente ---
+    # Usamos 'Sector' directamente porque así se llama en tu Excel
     sector_especifico = fila['Sector'] if 'Sector' in fila else "Sector No Especificado"
     
     rol_oficial = fila['ROL NUEVO']
@@ -318,7 +316,7 @@ else:
     ax.grid(True, alpha=0.3)
     st.pyplot(fig)
 
-    # --- NUEVA SECCIÓN: TABLA HISTÓRICA DE TASAS ---
+    # --- TABLA HISTÓRICA ---
     with st.expander("📅 Ver Histórico de Tránsito y Tasas Reales (2015-2024)", expanded=False):
         st.write("Calculado a partir de los Censos disponibles:")
         
@@ -349,14 +347,17 @@ else:
         
         st.table(df_hist.set_index('Año'))
 
-    # --- TABLA DE PROYECCIÓN ---
+    # --- TABLA DE PROYECCIÓN (ACTUALIZADA) ---
     with st.expander("📄 Ver Tabla de Proyección Futura (2025-2045)", expanded=False):
         df_tabla = pd.DataFrame({'TMDA Proyectado': pred.values}, index=pred.index)
         serie_completa_calc = pd.concat([pd.Series([tmda_24], index=[2024]), pred])
         crecimiento_pct = serie_completa_calc.pct_change() * 100
-        df_tabla['Crecimiento (%)'] = crecimiento_pct.loc[2025:]
+        
+        # Nombre de columna unificado
+        df_tabla['Crecimiento Anual (%)'] = crecimiento_pct.loc[2025:]
+        
         df_tabla['TMDA Proyectado'] = df_tabla['TMDA Proyectado'].astype(int)
-        df_tabla['Crecimiento (%)'] = df_tabla['Crecimiento (%)'].apply(lambda x: f"{x:.2f}%")
+        df_tabla['Crecimiento Anual (%)'] = df_tabla['Crecimiento Anual (%)'].apply(lambda x: f"{x:.2f}%")
         st.table(df_tabla)
 
     # --- SECCIÓN FINAL: DIAGNÓSTICO ---
