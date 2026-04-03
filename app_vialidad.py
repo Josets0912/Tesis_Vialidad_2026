@@ -48,7 +48,7 @@ df = cargar_datos()
 st.sidebar.header("🔍 Panel de Control")
 
 # Selector de Rol Oficial
-roles = sorted(df['ROL NUEVO'].unique())
+roles = sorted(df['ROL NUEVO'].dropna().astype(str).unique())
 rol_sel = st.sidebar.selectbox("Seleccione Rol Oficial:", roles)
 
 # Filtramos por Rol
