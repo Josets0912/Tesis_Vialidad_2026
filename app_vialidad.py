@@ -22,7 +22,6 @@ def cargar_datos():
     archivo_maestra = "DATA_MAESTRA_TESIS.xlsx"
     archivo_inventario = "Inventario_Rutas_Maule_Completo.xlsx"
     
-    # Leemos los Excels directamente
     df_maestra = pd.read_excel(archivo_maestra)
     df_inv = pd.read_excel(archivo_inventario)
     
@@ -32,7 +31,7 @@ def cargar_datos():
         if col in df_maestra.columns:
             df_maestra[col] = df_maestra[col].astype(str).str.strip()
             
-    # NUEVO: LIMPIEZA DE DATOS INVENTARIO (Evita errores por espacios en Excel)
+    # LIMPIEZA DE DATOS INVENTARIO (Evita errores por espacios ocultos)
     if 'Rol' in df_inv.columns:
         df_inv['Rol'] = df_inv['Rol'].astype(str).str.strip()
     
@@ -58,7 +57,6 @@ roles = sorted(df['ROL NUEVO'].dropna().astype(str).unique())
 rol_sel = st.sidebar.selectbox("Seleccione Rol Oficial:", roles)
 
 df_rol = df[df['ROL NUEVO'] == rol_sel].copy()
-
 df_rol['ETIQUETA'] = df_rol['NOMBRE DEL CAMINO'] + " (" + df_rol['ESTACIÓN'] + ")"
 tramo_sel = st.sidebar.selectbox("Seleccione Sector:", df_rol['ETIQUETA'].tolist())
 
@@ -86,20 +84,30 @@ if not btn_calc:
     st.markdown("<h3 style='text-align: center; color: #1f77b4;'>Desarrollado por José Tapia</h3>", unsafe_allow_html=True)
     st.info("👈 Seleccione un camino en el menú lateral para iniciar el análisis.")
 else:
-    # FILTRO DE SEGURIDAD: ¿Es camino granular?
-    datos_inv_especifico = df_inv[df_inv['Rol'] == rol_sel].copy()
-    es_granular = False
-    info_inv = None
+    # 1. AISLAR LA FILA SELECCIONADA EN LA DATA MAESTRA
+    fila = df_rol[df_rol['ETIQUETA'] == tramo_sel].iloc[0]
+    nombre = fila['NOMBRE DEL CAMINO']
+    rol_oficial = fila['ROL NUEVO']
+    carpeta = fila['TIPO DE CARPETA']
+    clasificacion = fila['CLASIFICACIÓN']
+    calzada_info = fila['CALZADA'] if 'CALZADA' in fila else "No Inf"
+    sector_especifico = fila['Sector']
     
+    # 2. EVALUAR SI LA CARPETA ES GRANULAR DESDE LA DATA MAESTRA
+    rodadura_maestra = str(carpeta).upper()
+    es_granular = any(x in rodadura_maestra for x in ["RIPIO", "GRANULAR", "TIERRA", "SUELO", "NATURAL"])
+    
+    # 3. OBTENER EEq Y PRECIPITACIÓN DESDE EL INVENTARIO
+    datos_inv_especifico = df_inv[df_inv['Rol'] == rol_sel].copy()
+    info_inv = None
     if not datos_inv_especifico.empty:
         info_inv = datos_inv_especifico.iloc[0]
-        rodadura = str(info_inv['Capa de Rodadura']).upper()
-        # NUEVO: Ampliamos los términos de búsqueda
-        if any(x in rodadura for x in ["RIPIO", "GRANULAR", "TIERRA", "SUELO", "NATURAL"]):
-            es_granular = True
 
-    # CREACIÓN DE PESTAÑAS
-    if es_granular:
+    # 4. CREACIÓN CONDICIONAL DE PESTAÑAS
+    # Solo mostramos diseño si es granular Y tenemos sus datos de ejes en el inventario
+    mostrar_diseno = es_granular and (info_inv is not None)
+    
+    if mostrar_diseno:
         tab_demanda, tab_diseno = st.tabs(["📈 Análisis de Demanda", "🛣️ Diseño Estructural"])
     else:
         tab_demanda = st.tabs(["📈 Análisis de Demanda"])[0]
@@ -107,22 +115,14 @@ else:
     with tab_demanda:
         st.markdown("### 🚧 Sistema de Gestión de Pavimentos y Proyección de Demanda")
         
-        # MENSAJES DE DIAGNÓSTICO (Te dirán por qué no aparece la pestaña de diseño)
+        # MENSAJES DE DIAGNÓSTICO
         if not es_granular:
-            if datos_inv_especifico.empty:
-                st.warning(f"⚠️ El camino **{rol_sel}** no se encontró en el Excel 'Inventario_Rutas_Maule_Completo'. Por eso no se calcula pavimento.")
-            else:
-                st.info(f"ℹ️ La pestaña de Diseño Estructural está oculta porque este camino ya figura como: **{info_inv['Capa de Rodadura']}** en el Inventario.")
+            st.info(f"ℹ️ La pestaña de Diseño Estructural está oculta porque este sector figura con carpeta de tipo: **{carpeta}** en el censo oficial.")
+        elif info_inv is None:
+            st.warning(f"⚠️ Este camino es de **{carpeta}**, pero no se encuentra en el archivo de Inventario. Faltan los Ejes Equivalentes (EEq) para realizar el diseño estructural.")
                 
-        fila = df_rol[df_rol['ETIQUETA'] == tramo_sel].iloc[0]
-        nombre = fila['NOMBRE DEL CAMINO']
-        rol_oficial = fila['ROL NUEVO']
-        carpeta = fila['TIPO DE CARPETA']
-        clasificacion = fila['CLASIFICACIÓN']
-        calzada_info = fila['CALZADA'] if 'CALZADA' in fila else "No Inf"
-        
         st.title(f"📍 {nombre}")
-        st.markdown(f"<div class='subtitle-sector'>Sector: {fila['Sector']}</div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='subtitle-sector'>Sector: {sector_especifico}</div>", unsafe_allow_html=True)
         
         c1, c2, c3, c4 = st.columns(4)
         with c1: st.markdown(f"<div class='info-card'><div class='info-label'>Rol Oficial</div><div class='info-value'>{rol_oficial}</div></div>", unsafe_allow_html=True)
@@ -278,15 +278,13 @@ else:
 
         with col_diag:
             st.markdown("#### 📢 Estado del Proyecto")
-            carpeta_up, calzada_up = carpeta.upper(), calzada_info.upper()
-            es_no_pavimentado = any(x in carpeta_up for x in ["Tierra", "Ripio", "Grava", "Suelo"])
-            es_pavimentado = not es_no_pavimentado
-            es_doble_via = "DOBLE" in calzada_up or "DOBLE" in carpeta_up
+            calzada_up = calzada_info.upper()
+            es_doble_via = "DOBLE" in calzada_up or "DOBLE" in rodadura_maestra
 
-            if es_no_pavimentado:
+            if es_granular:
                 if tmda_24 > 300: st.error(f"🔴 **PRIORIDAD ALTA:** Camino granular con {int(tmda_24)} veh/día. Supera norma (300). **Se recomienda Pavimentación.**")
                 else: st.success(f"🟢 **CONSERVACIÓN:** Tránsito bajo ({int(tmda_24)} veh/día). Mantener perfilado.")
-            elif es_pavimentado:
+            else:
                 if not es_doble_via:
                     if tmda_24 > 5000: st.error(f"🔴 **SATURACIÓN VIGENTE (2024):** Vía simple. **Estudio Segunda Calzada.**")
                     elif anio_saturacion and anio_saturacion > 2024: st.warning(f"🟡 **ALERTA FUTURA:** Saturación en {anio_saturacion}. **Planificar ampliación.**")
@@ -309,10 +307,10 @@ else:
         st.markdown("<br><hr><div style='text-align: center; color: #888;'><small>Creado por José Tapia - Tesis Ingeniería Civil</small></div>", unsafe_allow_html=True)
 
     # --- PESTAÑA DE DISEÑO ---
-    if es_granular:
+    if mostrar_diseno:
         with tab_diseno:
             st.header("📏 Dimensionamiento Estructural (AASHTO 93)")
-            st.write(f"Diseño para conversión de **{info_inv['Capa de Rodadura']}** a Pavimento Flexible.")
+            st.write(f"Diseño para conversión de **{carpeta}** a Pavimento Flexible.")
             
             col1, col2 = st.columns(2)
             with col1:
