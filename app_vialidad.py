@@ -1,49 +1,82 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+import math
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator
 from statsmodels.tsa.holtwinters import ExponentialSmoothing
 import warnings
 
-# Silenciamos advertencias matemáticas
 warnings.filterwarnings("ignore")
 
 # --- 1. CONFIGURACIÓN DE PÁGINA ---
-st.set_page_config(
-    page_title="Gestión Vial - Tesis José Tapia",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+st.set_page_config(page_title="Gestión Vial - Tesis José Tapia", layout="wide", initial_sidebar_state="expanded")
 
-# --- 2. CARGA DE DATOS ---
+# --- FUNCIONES CACHEADAS (Para evitar que la página se reinicie/congele) ---
 @st.cache_data
 def cargar_datos():
-    archivo_maestra = "DATA_MAESTRA_TESIS.xlsx"
-    archivo_inventario = "Inventario_Rutas_Maule_Completo.xlsx"
+    df_maestra = pd.read_excel("DATA_MAESTRA_TESIS.xlsx")
+    df_inv = pd.read_excel("Inventario_Rutas_Maule_Completo.xlsx")
     
-    df_maestra = pd.read_excel(archivo_maestra)
-    df_inv = pd.read_excel(archivo_inventario)
-    
-    # LIMPIEZA DE DATOS MAESTRA
     cols_limpiar = ['ROL', 'ROL NUEVO', 'NOMBRE DEL CAMINO', 'Sector', 'TIPO DE CARPETA', 'CLASIFICACIÓN', 'ESTACIÓN', 'CALZADA']
     for col in cols_limpiar:
         if col in df_maestra.columns:
             df_maestra[col] = df_maestra[col].astype(str).str.strip()
             
-    # LIMPIEZA DE DATOS INVENTARIO (Evita errores por espacios ocultos)
     if 'Rol' in df_inv.columns:
         df_inv['Rol'] = df_inv['Rol'].astype(str).str.strip()
     
-    # CORRECCIÓN 115 CANALES
     errores_115 = ['115 Canales', '115 CANALES', '115-Canales', '115 CH', '115-CH']
-    if 'ROL' in df_maestra.columns:
-        df_maestra['ROL'] = df_maestra['ROL'].replace(errores_115, 'Ruta 115 CH')
-    if 'ROL NUEVO' in df_maestra.columns:
-        df_maestra['ROL NUEVO'] = df_maestra['ROL NUEVO'].replace(errores_115, 'Ruta 115 CH')
-
+    if 'ROL' in df_maestra.columns: df_maestra['ROL'] = df_maestra['ROL'].replace(errores_115, 'Ruta 115 CH')
+    if 'ROL NUEVO' in df_maestra.columns: df_maestra['ROL NUEVO'] = df_maestra['ROL NUEVO'].replace(errores_115, 'Ruta 115 CH')
     return df_maestra, df_inv
 
+@st.cache_data
+def calcular_proyeccion(serie_datos):
+    """Esta función evita que el modelo Holt-Winters se recalcule al mover un slider"""
+    try:
+        try:
+            modelo = ExponentialSmoothing(serie_datos, trend='mul', seasonal=None, damped_trend=True).fit(damping_trend=0.92)
+        except:
+            modelo = ExponentialSmoothing(serie_datos, trend='add', seasonal=None, damped_trend=True).fit(damping_trend=0.92)
+            
+        anios_fut = np.arange(2025, 2046)
+        pred_raw = pd.Series(modelo.forecast(len(anios_fut)).values, index=anios_fut)
+        
+        tasa_crecimiento_inicial = (pred_raw.iloc[1] / pred_raw.iloc[0]) if pred_raw.iloc[0] > 0 and pred_raw.iloc[1] > 0 else 1.0
+        base_teorica_modelo = pred_raw.iloc[0] / tasa_crecimiento_inicial
+        ultimo_real = serie_datos.iloc[-1]
+        factor_ajuste = ultimo_real / base_teorica_modelo if base_teorica_modelo > 0 else 1.0
+        pred_escalada = pred_raw * factor_ajuste
+        
+        pred_ajustada = []
+        piso = ultimo_real 
+        for y in anios_fut:
+            val = pred_escalada[y]
+            if val < piso: val = piso
+            else: piso = val
+            pred_ajustada.append(val)
+            
+        return pd.Series(pred_ajustada, index=anios_fut)
+    except Exception as e:
+        return None
+
+def resolver_sn_aashto(W18, ZR, So, dPSI, MR):
+    """Algoritmo matemático para resolver la ecuación AASHTO 93 y obtener el SN Requerido"""
+    if W18 <= 0 or MR <= 0: return 0.1
+    sn_min, sn_max = 0.1, 20.0
+    for _ in range(50): # Búsqueda Binaria
+        sn_guess = (sn_min + sn_max) / 2.0
+        term1 = 9.36 * math.log10(sn_guess + 1) - 0.20
+        term2 = math.log10(dPSI / 2.7) / (0.40 + (1094 / ((sn_guess + 1) ** 5.19)))
+        term3 = 2.32 * math.log10(MR) - 8.07
+        log_W18_guess = (ZR * So) + term1 + term2 + term3
+        
+        if (10 ** log_W18_guess) > W18: sn_max = sn_guess
+        else: sn_min = sn_guess
+    return (sn_min + sn_max) / 2.0
+
+# --- 2. CARGA DE ARCHIVOS ---
 try:
     df, df_inv = cargar_datos()
 except Exception as e:
@@ -52,7 +85,6 @@ except Exception as e:
 
 # --- 3. MENÚ LATERAL ---
 st.sidebar.header("🔍 Panel de Control")
-
 roles = sorted(df['ROL NUEVO'].dropna().astype(str).unique())
 rol_sel = st.sidebar.selectbox("Seleccione Rol Oficial:", roles)
 
@@ -74,19 +106,17 @@ st.markdown("""
     .ref-table { font-size: 12px; width: 100%; border-collapse: collapse; }
     .ref-table th { background-color: #f1f3f5; border-bottom: 2px solid #dee2e6; padding: 8px; text-align: left; }
     .ref-table td { border-bottom: 1px solid #dee2e6; padding: 8px; }
-    .verdict-ok { background-color: #d4edda; color: #155724; padding: 10px; border-radius: 5px; font-weight: bold; border-left: 5px solid #28a745; }
-    .verdict-bad { background-color: #f8d7da; color: #721c24; padding: 10px; border-radius: 5px; font-weight: bold; border-left: 5px solid #dc3545; }
+    .verdict-ok { background-color: #d4edda; color: #155724; padding: 15px; border-radius: 5px; font-weight: bold; border-left: 8px solid #28a745; font-size: 18px; text-align: center;}
+    .verdict-bad { background-color: #f8d7da; color: #721c24; padding: 15px; border-radius: 5px; font-weight: bold; border-left: 8px solid #dc3545; font-size: 18px; text-align: center;}
+    .sn-box { background-color: #e2e3e5; padding: 10px; border-radius: 5px; text-align: center; border: 1px solid #ced4da; }
 </style>
 """, unsafe_allow_html=True)
 
-# --- 4. INTERFAZ Y CÁLCULOS ---
 if not btn_calc:
-    st.markdown("<br><br>", unsafe_allow_html=True)
-    st.markdown("<h1 style='text-align: center;'>🚧 Sistema de Gestión de Pavimentos</h1>", unsafe_allow_html=True)
+    st.markdown("<br><br><h1 style='text-align: center;'>🚧 Sistema de Gestión de Pavimentos</h1>", unsafe_allow_html=True)
     st.markdown("<h3 style='text-align: center; color: #1f77b4;'>Desarrollado por José Tapia</h3>", unsafe_allow_html=True)
     st.info("👈 Seleccione un camino en el menú lateral para iniciar el análisis.")
 else:
-    # 1. AISLAR LA FILA SELECCIONADA EN LA DATA MAESTRA
     fila = df_rol[df_rol['ETIQUETA'] == tramo_sel].iloc[0]
     nombre = fila['NOMBRE DEL CAMINO']
     rol_oficial = fila['ROL NUEVO']
@@ -95,35 +125,20 @@ else:
     calzada_info = fila['CALZADA'] if 'CALZADA' in fila else "No Inf"
     sector_especifico = fila['Sector']
     
-    # 2. EVALUAR SI LA CARPETA ES GRANULAR DESDE LA DATA MAESTRA
     rodadura_maestra = str(carpeta).upper()
     es_granular = any(x in rodadura_maestra for x in ["RIPIO", "GRANULAR", "TIERRA", "SUELO", "NATURAL"])
     
-    # 3. OBTENER EEq Y PRECIPITACIÓN DESDE EL INVENTARIO
     datos_inv_especifico = df_inv[df_inv['Rol'] == rol_sel].copy()
-    info_inv = None
-    if not datos_inv_especifico.empty:
-        info_inv = datos_inv_especifico.iloc[0]
+    info_inv = datos_inv_especifico.iloc[0] if not datos_inv_especifico.empty else None
 
-    # 4. CREACIÓN CONDICIONAL DE PESTAÑAS
-    mostrar_diseno = es_granular and (info_inv is not None)
-    
-    if mostrar_diseno:
-        tab_demanda, tab_diseno = st.tabs(["📈 Análisis de Demanda", "🛣️ Diseño Estructural"])
-    else:
-        tab_demanda = st.tabs(["📈 Análisis de Demanda"])[0]
+    # ESTABILIDAD DE PESTAÑAS: Siempre se crean ambas
+    tab_demanda, tab_diseno = st.tabs(["📈 Análisis de Demanda", "🛣️ Diseño Estructural (AASHTO)"])
 
     # =========================================================================
-    # PESTAÑA 1: ANÁLISIS DE DEMANDA (INTACTA)
+    # PESTAÑA 1: DEMANDA
     # =========================================================================
     with tab_demanda:
         st.markdown("### 🚧 Sistema de Gestión de Pavimentos y Proyección de Demanda")
-        
-        if not es_granular:
-            st.info(f"ℹ️ La pestaña de Diseño Estructural está oculta porque este sector figura con carpeta de tipo: **{carpeta}** en el censo oficial.")
-        elif info_inv is None:
-            st.warning(f"⚠️ Este camino es de **{carpeta}**, pero no se encuentra en el archivo de Inventario. Faltan los Ejes Equivalentes (EEq) para realizar el diseño estructural.")
-                
         st.title(f"📍 {nombre}")
         st.markdown(f"<div class='subtitle-sector'>Sector: {sector_especifico}</div>", unsafe_allow_html=True)
         
@@ -149,243 +164,138 @@ else:
         serie_completa[anios_censo[-1]] = datos_reales[anios_censo[-1]]
         serie = pd.Series(serie_completa).sort_index()
         
-        try:
-            try:
-                modelo = ExponentialSmoothing(serie, trend='mul', seasonal=None, damped_trend=True).fit(damping_trend=0.92)
-            except:
-                modelo = ExponentialSmoothing(serie, trend='add', seasonal=None, damped_trend=True).fit(damping_trend=0.92)
-                
-            anios_fut = np.arange(2025, 2046)
-            pred_raw = modelo.forecast(len(anios_fut))
-            pred_raw = pd.Series(pred_raw.values, index=anios_fut)
+        # LLAMADA A LA FUNCIÓN CACHEADA (Para máxima velocidad)
+        pred = calcular_proyeccion(serie)
+        
+        if pred is not None:
+            tmda_24 = serie[2024]
+            tmda_26 = pred[2026]
+            tmda_45 = pred[2045]
             
-            if pred_raw.iloc[0] > 0 and pred_raw.iloc[1] > 0:
-                tasa_crecimiento_inicial = pred_raw.iloc[1] / pred_raw.iloc[0]
-            else:
-                tasa_crecimiento_inicial = 1.0
+            tasa_24_26 = ((tmda_26 / tmda_24) ** (1/2) - 1) * 100 if tmda_24 > 0 and tmda_26 > 0 else 0
+            tasa_26_45 = ((tmda_45 / tmda_26) ** (1/19) - 1) * 100 if tmda_26 > 0 and tmda_45 > 0 else 0
+
+            st.markdown("<br>", unsafe_allow_html=True)
+            st.markdown(f"<div class='rate-box'>📊 Tasa Promedio Anual (2024-2026): <b>{tasa_24_26:.2f}%</b> &nbsp;|&nbsp; Tasa Promedio Anual (2026-2045): <b>{tasa_26_45:.2f}%</b></div>", unsafe_allow_html=True)
             
-            base_teorica_modelo = pred_raw.iloc[0] / tasa_crecimiento_inicial
-            ultimo_real = serie.iloc[-1]
-            factor_ajuste = ultimo_real / base_teorica_modelo if base_teorica_modelo > 0 else 1.0
-            pred_escalada = pred_raw * factor_ajuste
+            colA, colB, colC = st.columns(3)
+            colA.metric("🚗 Censo 2024", f"{int(tmda_24)} veh/día")
+            colB.metric("📈 Proyección 2026", f"{int(tmda_26)} veh/día")
+            colC.metric("🔭 Proyección 2045", f"{int(tmda_45)} veh/día")
+
+            st.subheader("Evolución de la Demanda y Umbrales")
+            fig, ax = plt.subplots(figsize=(10, 5))
             
-            pred_ajustada = []
-            piso = ultimo_real 
-            for y in anios_fut:
-                val = pred_escalada[y]
-                if val < piso:
-                    val = piso
-                else:
-                    piso = val
-                pred_ajustada.append(val)
-            pred = pd.Series(pred_ajustada, index=anios_fut)
-
-        except Exception as e:
-            st.error(f"Error en el cálculo: {e}")
-            st.stop()
+            x_interp = [a for a in serie.index if a not in anios_censo]
+            y_interp = [serie[a] for a in x_interp]
+            x_real = anios_censo
+            y_real = [serie[a] for a in x_real if a in serie.index]
             
-        tmda_24 = serie[2024]
-        tmda_26 = pred[2026]
-        tmda_45 = pred[2045]
-        
-        tasa_24_26 = ((tmda_26 / tmda_24) ** (1/2) - 1) * 100 if tmda_24 > 0 and tmda_26 > 0 else 0
-        tasa_26_45 = ((tmda_45 / tmda_26) ** (1/19) - 1) * 100 if tmda_26 > 0 and tmda_45 > 0 else 0
-
-        st.markdown("<br>", unsafe_allow_html=True)
-        st.markdown(f"""
-            <div class='rate-box'>
-                📊 Tasa Promedio Anual (2024-2026): <b>{tasa_24_26:.2f}%</b> &nbsp;|&nbsp; 
-                Tasa Promedio Anual (2026-2045): <b>{tasa_26_45:.2f}%</b>
-            </div>
-        """, unsafe_allow_html=True)
-        
-        colA, colB, colC = st.columns(3)
-        colA.metric("🚗 Censo 2024", f"{int(tmda_24)} veh/día")
-        colB.metric("📈 Proyección 2026", f"{int(tmda_26)} veh/día")
-        colC.metric("🔭 Proyección 2045", f"{int(tmda_45)} veh/día")
-
-        st.subheader("Evolución de la Demanda y Umbrales")
-        fig, ax = plt.subplots(figsize=(10, 5))
-        
-        x_interp = [a for a in serie.index if a not in anios_censo]
-        y_interp = [serie[a] for a in x_interp]
-        x_real = anios_censo
-        y_real = [serie[a] for a in x_real if a in serie.index]
-        
-        ax.plot(serie.index, serie.values, '-', color='gray', alpha=0.4, linewidth=1)
-        ax.scatter(x_interp, y_interp, color='#fd7e14', s=40, label='Interpolado (Geométrico)', zorder=5)
-        ax.scatter(x_real, y_real, color='black', s=60, label='Censo Oficial', zorder=10)
-        
-        x_proyeccion = [2024] + list(pred.index)
-        y_proyeccion = [serie[2024]] + list(pred.values)
-        ax.plot(x_proyeccion, y_proyeccion, '--.', color='#2ca02c', linewidth=1, markersize=4, label='Proyección (Holt Multiplicativo)')
-        
-        ax.axhline(5000, color='gray', linestyle=':', alpha=0.5, label='Umbral 5.000')
-        
-        anio_saturacion = None
-        val_saturacion = None
-        full_vals = pd.concat([serie, pred])
-        solo_futuro = full_vals[full_vals.index >= 2024]
-        
-        for y in solo_futuro.index:
-            if solo_futuro[y] >= 5000:
-                anio_saturacion = y
-                val_saturacion = solo_futuro[y]
-                break
-        
-        if anio_saturacion is not None:
-            ax.scatter([anio_saturacion], [val_saturacion], color='red', s=150, zorder=15, edgecolors='white')
-            if anio_saturacion == 2024:
-                 texto_sat = f"¡SATURADO HOY!\n(Año 2024)"
-            else:
-                 texto_sat = f"¡SATURACIÓN!\nAño {int(anio_saturacion)}"
-            offset_y = 600 if val_saturacion < 10000 else -1500
-            ax.annotate(texto_sat, xy=(anio_saturacion, val_saturacion), 
-                        xytext=(anio_saturacion, val_saturacion + offset_y),
-                        arrowprops=dict(facecolor='red', shrink=0.05),
-                        color='red', fontweight='bold', ha='center')
-
-        ax.set_ylabel("Flujo Vehicular (veh/día)")
-        ax.xaxis.set_major_locator(MaxNLocator(integer=True))
-        ax.legend(loc='upper left')
-        ax.grid(True, alpha=0.3)
-        st.pyplot(fig)
-
-        with st.expander("📅 Ver Histórico de Tránsito y Tasas Reales (2015-2024)", expanded=False):
-            datos_hist = {'Año': anios_censo, 'TMDA Real': vals_censo.astype(int)}
-            df_hist = pd.DataFrame(datos_hist)
-            crecimiento = [0.0]
-            for i in range(1, len(df_hist)):
-                v_actual, v_ant = df_hist.iloc[i]['TMDA Real'], df_hist.iloc[i-1]['TMDA Real']
-                n_anios = df_hist.iloc[i]['Año'] - df_hist.iloc[i-1]['Año']
-                tasa = ((v_actual / v_ant) ** (1/n_anios) - 1) * 100 if v_ant > 0 and n_anios > 0 else 0.0
-                crecimiento.append(tasa)
-            df_hist['Crecimiento Anual (%)'] = crecimiento
-            df_hist['Crecimiento Anual (%)'] = df_hist['Crecimiento Anual (%)'].apply(lambda x: f"{x:.2f}%")
-            df_hist.at[0, 'Crecimiento Anual (%)'] = "-" 
-            st.table(df_hist.set_index('Año'))
-
-        with st.expander("📄 Ver Tabla de Proyección Futura (2025-2045)", expanded=False):
-            df_tabla = pd.DataFrame({'TMDA Proyectado': pred.values}, index=pred.index)
-            serie_completa_calc = pd.concat([pd.Series([tmda_24], index=[2024]), pred])
-            crecimiento_pct = serie_completa_calc.pct_change() * 100
-            df_tabla['Crecimiento Anual (%)'] = crecimiento_pct.loc[2025:]
-            df_tabla['TMDA Proyectado'] = df_tabla['TMDA Proyectado'].astype(int)
-            df_tabla['Crecimiento Anual (%)'] = df_tabla['Crecimiento Anual (%)'].apply(lambda x: f"{x:.2f}%")
-            st.table(df_tabla)
-
-        st.subheader("📋 Diagnóstico Técnico y Criterios de Diseño")
-        col_diag, col_crit = st.columns([1.3, 1])
-
-        with col_diag:
-            st.markdown("#### 📢 Estado del Proyecto")
-            calzada_up = calzada_info.upper()
-            es_doble_via = "DOBLE" in calzada_up or "DOBLE" in rodadura_maestra
-
-            if es_granular:
-                if tmda_24 > 300: st.error(f"🔴 **PRIORIDAD ALTA:** Camino granular con {int(tmda_24)} veh/día. Supera norma (300). **Se recomienda Pavimentación.**")
-                else: st.success(f"🟢 **CONSERVACIÓN:** Tránsito bajo ({int(tmda_24)} veh/día). Mantener perfilado.")
-            else:
-                if not es_doble_via:
-                    if tmda_24 > 5000: st.error(f"🔴 **SATURACIÓN VIGENTE (2024):** Vía simple. **Estudio Segunda Calzada.**")
-                    elif anio_saturacion and anio_saturacion > 2024: st.warning(f"🟡 **ALERTA FUTURA:** Saturación en {anio_saturacion}. **Planificar ampliación.**")
-                    else: st.success("🟢 **OPERACIÓN NORMAL:** Capacidad suficiente.")
-                else: st.success("🟢 **ESTÁNDAR ADECUADO:** Doble Calzada acorde al flujo.")
-
-        with col_crit:
-            st.markdown("#### 📏 Referencia Manual de Carreteras (Vol. 3)")
-            st.markdown("""
-            <table class="ref-table">
-                <thead><tr><th>TMDA (veh/día)</th><th>Categoría</th><th>Intervención Sugerida</th></tr></thead>
-                <tbody>
-                    <tr><td><b>&lt; 300</b></td><td>Tránsito Bajo</td><td>Mantener Carpeta Granular</td></tr>
-                    <tr><td><b>300 – 5.000</b></td><td>Tránsito Medio</td><td>Pavimentación (Sello/Asfalto)</td></tr>
-                    <tr><td><b>&gt; 5.000</b></td><td>Saturación</td><td>Estudio de Segunda Calzada</td></tr>
-                </tbody>
-            </table>
-            """, unsafe_allow_html=True)
-
-        st.markdown("<br><hr><div style='text-align: center; color: #888;'><small>Creado por José Tapia - Tesis Ingeniería Civil</small></div>", unsafe_allow_html=True)
+            ax.plot(serie.index, serie.values, '-', color='gray', alpha=0.4, linewidth=1)
+            ax.scatter(x_interp, y_interp, color='#fd7e14', s=40, label='Interpolado (Geométrico)', zorder=5)
+            ax.scatter(x_real, y_real, color='black', s=60, label='Censo Oficial', zorder=10)
+            
+            x_proyeccion = [2024] + list(pred.index)
+            y_proyeccion = [serie[2024]] + list(pred.values)
+            ax.plot(x_proyeccion, y_proyeccion, '--.', color='#2ca02c', linewidth=1, markersize=4, label='Proyección (Holt)')
+            
+            ax.axhline(5000, color='gray', linestyle=':', alpha=0.5, label='Umbral 5.000')
+            ax.set_ylabel("Flujo Vehicular (veh/día)")
+            ax.xaxis.set_major_locator(MaxNLocator(integer=True))
+            ax.legend(loc='upper left')
+            ax.grid(True, alpha=0.3)
+            st.pyplot(fig)
+        else:
+            st.error("Error al calcular proyecciones.")
 
     # =========================================================================
-    # PESTAÑA 2: DISEÑO ESTRUCTURAL (ACTUALIZADA)
+    # PESTAÑA 2: DISEÑO ESTRUCTURAL (NUEVO DASHBOARD TIPO AASHTO)
     # =========================================================================
-    if mostrar_diseno:
-        with tab_diseno:
-            st.header("📏 Dimensionamiento Estructural (Método AASHTO 93)")
-            st.write(f"Cálculo de conversión de camino **{carpeta}** a Pavimento Flexible.")
+    with tab_diseno:
+        if not es_granular:
+            st.warning(f"⚠️ Este camino ya cuenta con una superficie de **{carpeta}**. El diseño estructural inicial está deshabilitado.")
+        elif info_inv is None:
+            st.warning("⚠️ No existen datos de Ejes Equivalentes (EEq) para este Rol en el inventario.")
+        else:
+            st.header("📏 MÉTODO AASHTO 93 - DISEÑO DE PAVIMENTO FLEXIBLE")
             st.markdown("---")
 
-            # --- SECCIÓN 1: DATOS DE ENTRADA (Tránsito y Subrasante) ---
-            st.subheader("1. Datos de Entrada")
-            col_ent1, col_ent2 = st.columns(2)
-            
-            with col_ent1:
-                eeq_diseno = info_inv['EEq 2045']
-                st.metric("Tráfico en Ejes Equivalentes (EEq 2045)", f"{eeq_diseno:,.0f}")
-                # El usuario puede modificar el CBR del suelo natural
+            col_izq, col_der = st.columns([1, 1])
+
+            # --- COLUMNA IZQUIERDA: DATOS DE ENTRADA ---
+            with col_izq:
+                st.subheader("📝 DATOS DE ENTRADA")
+                
+                eeq_val = info_inv['EEq 2045']
+                st.text_input("Tráfico en Ejes Equivalentes (EES)", value=f"{eeq_val:,.0f}", disabled=True)
+                
+                confiabilidad_pct = st.number_input("Nivel de Confiabilidad (R) %", min_value=50.0, max_value=99.9, value=95.0, step=1.0)
+                
+                # Conversión de Confiabilidad a Desviación Normal (Zr)
+                dict_zr = {50: 0.0, 75: -0.674, 80: -0.841, 85: -1.036, 90: -1.282, 95: -1.645, 99: -2.327}
+                # Buscar el más cercano si no es exacto
+                zr = min(dict_zr.keys(), key=lambda k: abs(k - confiabilidad_pct))
+                zr_val = dict_zr[zr]
+
+                so_val = st.number_input("Desviación Estándar (So)", min_value=0.1, max_value=0.9, value=0.45, step=0.01)
+                dpsi_val = st.number_input("Pérdida de Serviciabilidad (ΔPSI)", min_value=0.5, max_value=4.0, value=2.2, step=0.1)
+                
                 cbr_subrasante = st.number_input("C.B.R. de la Subrasante (%)", min_value=1.0, max_value=100.0, value=4.0, step=0.1)
                 
-            with col_ent2:
-                precip = info_inv['Precipitacion promedio Mensual (mm)']
-                st.metric("Precipitación Promedio", f"{precip} mm/mes")
-                # Cálculo de drenaje basado en tu macro
-                m_coef = 0.8 if precip > 80 else (1.0 if precip > 40 else 1.1)
-                st.info(f"**Coeficientes de Drenaje ($m_2, m_3$):** `{m_coef}` (Calculado por clima regional)")
+                # Cálculo de Módulo Resiliente (Ecuación típica chilena/AASHTO)
+                mr_calc = 2555 * (cbr_subrasante ** 0.64)
+                mr_val = st.number_input("Módulo Resiliente (MR) psi", value=float(round(mr_calc, 2)))
 
-            st.markdown("<br>", unsafe_allow_html=True)
+                # Cálculo de NE Requerido Interno
+                ne_req = resolver_sn_aashto(eeq_val, zr_val, so_val, dpsi_val, mr_val)
 
-            # --- SECCIÓN 2: PROPIEDADES DE LOS MATERIALES ---
-            st.subheader("2. Propiedades de los Materiales")
-            col_mat1, col_mat2 = st.columns(2)
-            
-            with col_mat1:
-                # Controles interactivos como en tu imagen
-                cbr_base = st.slider("C.B.R. Base Granular (%)", min_value=40, max_value=100, value=80, step=5)
-                cbr_subbase = st.slider("C.B.R. Subbase Granular (%)", min_value=15, max_value=60, value=30, step=5)
+                st.markdown("<br>", unsafe_allow_html=True)
+                st.markdown(f"<div class='sn-box'><h4>NE Requerido: <b>{ne_req:.2f}</b></h4></div>", unsafe_allow_html=True)
 
-            with col_mat2:
-                # Fórmulas extraídas exactamente de tu Excel para calcular a2 y a3
-                a1 = 0.17  # Fijo para carpeta asfáltica
-                a2 = min(a1, 0.032 * (cbr_base ** 0.32))
-                a3 = min(a2, 0.058 * (cbr_subbase ** 0.19))
+            # --- COLUMNA DERECHA: PROPIEDADES DE MATERIALES ---
+            with col_der:
+                st.subheader("🧱 PROPIEDADES DE LOS MATERIALES")
                 
-                st.markdown("**Coeficientes Estructurales ($a$):**")
-                st.write(f"- Carpeta Asfáltica ($a_1$): `{a1:.3f}`")
-                st.write(f"- Base Granular ($a_2$): `{a2:.3f}`")
-                st.write(f"- Subbase Granular ($a_3$): `{a3:.3f}`")
+                col_m1, col_m2 = st.columns(2)
+                with col_m1:
+                    a1 = st.number_input("Coef. Estructural a1", value=0.170, step=0.005, format="%.3f")
+                    a2 = st.number_input("Coef. Estructural a2", value=0.130, step=0.005, format="%.3f")
+                    a3 = st.number_input("Coef. Estructural a3", value=0.110, step=0.005, format="%.3f")
+                with col_m2:
+                    st.markdown("<br><br><br>", unsafe_allow_html=True) # Espaciador para alinear
+                    m2 = st.number_input("Coef. Drenaje m2", value=1.00, step=0.05, format="%.2f")
+                    m3 = st.number_input("Coef. Drenaje m3", value=1.00, step=0.05, format="%.2f")
 
             st.markdown("---")
 
-            # --- SECCIÓN 3: CÁLCULO DE NÚMERO ESTRUCTURAL Y ESPESORES ---
-            st.subheader("3. Propuesta de Espesores")
-            
-            # Cálculo del SN Requerido (Fórmula AASHTO simplificada)
-            sn_req = 0.47 * np.log10(eeq_diseno + 1) * (1.2 / (cbr_subrasante**0.15))
-            
-            # Lógica de cálculo de espesores (en cm)
-            d1_cm = 5.0 if eeq_diseno < 500000 else (7.0 if eeq_diseno < 1500000 else 10.0)
-            d2_cm = 20.0
-            sn_aportado_parcial = (a1 * d1_cm) + (a2 * d2_cm * m_coef)
-            d3_cm = (sn_req - sn_aportado_parcial) / (a3 * m_coef)
-            d3_cm = max(15.0, round(d3_cm, 0)) # Mínimo constructivo 15cm
+            # --- SECCIÓN INFERIOR: ESPESORES Y RESULTADO ---
+            st.subheader("🏗️ ESPESORES PROPUESTOS")
+            st.caption("Ajuste los espesores (D1, D2, D3) para cumplir con el NE Requerido. (Nota: Asumiendo fórmula SN = a * D * m)")
 
-            # Mostrar Cajas de Espesores
-            res1, res2, res3 = st.columns(3)
-            res1.info(f"**$D_1$ - Carpeta Asfáltica**\n\n### {d1_cm} cm")
-            res2.info(f"**$D_2$ - Base Granular**\n\n### {d2_cm} cm")
-            res3.info(f"**$D_3$ - Subbase**\n\n### {d3_cm} cm")
+            col_e1, col_e2, col_e3, col_res = st.columns([1, 1, 1, 1.5])
 
-            # Validación final del Diseño (Igual al cuadro verde de "OK" de tu imagen)
-            sn_calculado = (a1 * d1_cm) + (a2 * d2_cm * m_coef) + (a3 * d3_cm * m_coef)
-            
-            st.markdown("<br>", unsafe_allow_html=True)
-            col_v1, col_v2 = st.columns(2)
-            
-            with col_v1:
-                st.metric("NE Requerido", f"{sn_req:.2f}")
-            with col_v2:
-                if sn_calculado >= sn_req:
-                    st.markdown(f"<div class='verdict-ok'>✅ OK! SN Calculado: {sn_calculado:.2f}</div>", unsafe_allow_html=True)
+            with col_e1:
+                d1 = st.number_input("D1 (Carpeta)", value=4.0, step=0.5)
+                sn1 = a1 * d1
+                st.caption(f"SN1 Aportado: {sn1:.2f}")
+
+            with col_e2:
+                d2 = st.number_input("D2 (Base)", value=10.0, step=0.5)
+                sn2 = a2 * d2 * m2
+                st.caption(f"SN2 Aportado: {sn2:.2f}")
+
+            with col_e3:
+                d3 = st.number_input("D3 (Subbase)", value=23.0, step=0.5)
+                sn3 = a3 * d3 * m3
+                st.caption(f"SN3 Aportado: {sn3:.2f}")
+
+            sn_total = sn1 + sn2 + sn3
+
+            with col_res:
+                st.markdown("<div style='text-align: center; color: #555; margin-bottom: 5px;'>SN Total Calculado</div>", unsafe_allow_html=True)
+                st.markdown(f"<h2 style='text-align: center; margin-top: 0;'>{sn_total:.2f}</h2>", unsafe_allow_html=True)
+                
+                if sn_total >= ne_req:
+                    st.markdown(f"<div class='verdict-ok'>✅ OK</div>", unsafe_allow_html=True)
                 else:
-                    st.markdown(f"<div class='verdict-bad'>⚠️ INSUFICIENTE. SN Calculado: {sn_calculado:.2f}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div class='verdict-bad'>⚠️ INSUFICIENTE</div>", unsafe_allow_html=True)
