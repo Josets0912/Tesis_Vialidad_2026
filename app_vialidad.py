@@ -5,44 +5,6 @@ import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator
 from statsmodels.tsa.holtwinters import ExponentialSmoothing
 import warnings
-import io
-
-@st.cache_data
-def generar_reporte_maestro(df_maestro):
-    """Calcula la proyección 2045 para TODAS las estaciones del archivo"""
-    reporte = []
-    anios_censo = [2015, 2017, 2018, 2020, 2022, 2024]
-    cols_tmda = [f'TMDA {a}' for a in anios_censo]
-
-    for _, fila in df_maestro.iterrows():
-        try:
-            # Extraemos la serie histórica de la fila actual
-            serie = fila[cols_tmda].astype(float).dropna()
-            
-            if len(serie) >= 2:
-                # Aplicamos el mismo modelo de tu App (Holt-Winters)
-                modelo = ExponentialSmoothing(
-                    serie, trend='add', damped_trend=True
-                ).fit(damping_trend=0.92)
-                
-                # Proyectamos al 2045 (21 años desde 2024)
-                proyeccion = modelo.forecast(21)
-                tmda_2045 = int(round(proyeccion.iloc[-1]))
-            else:
-                tmda_2045 = "Datos Insuficientes"
-
-            # Guardamos los datos clave
-            reporte.append({
-                "Rol": fila.get('ROL NUEVO', 'S/R'),
-                "Estación": fila.get('ESTACIÓN', 'S/E'),
-                "Nombre del Camino": fila.get('NOMBRE DEL CAMINO', 'S/N'),
-                "TMDA 2024 (Real)": fila.get('TMDA 2024', 0),
-                "TMDA 2045 (Proyectado)": tmda_2045
-            })
-        except:
-            continue
-            
-    return pd.DataFrame(reporte)
 
 # Silenciamos advertencias matemáticas
 warnings.filterwarnings("ignore")
@@ -161,25 +123,7 @@ st.markdown("""
     }
 </style>
 """, unsafe_allow_html=True)
-st.sidebar.markdown("---")
-st.sidebar.subheader("📊 Reporte General")
 
-if st.sidebar.button("Generar Base de Datos 2045"):
-    with st.spinner("Procesando todas las estaciones del Maule..."):
-        df_maestro_proy = generar_reporte_maestro(df)
-        
-        # Convertir a Excel en memoria
-        output = io.BytesIO()
-        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-            df_maestro_proy.to_excel(writer, index=False, sheet_name='Proyecciones')
-        
-        st.sidebar.success("✅ ¡Lista completa generada!")
-        st.sidebar.download_button(
-            label="📥 Descargar Excel Maestro",
-            data=output.getvalue(),
-            file_name="Proyecciones_Vialidad_Maule_2045.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
 # --- 4. INTERFAZ Y CÁLCULOS ---
 
 if not btn_calc:
