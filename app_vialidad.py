@@ -301,7 +301,7 @@ else:
     if anio_saturacion is not None:
         ax.scatter([anio_saturacion], [val_saturacion], color='red', s=150, zorder=15, edgecolors='white')
         if anio_saturacion == 2024:
-             texto_sat = f"¡SATURADO HOY!\n(Año 2024)"
+             texto_sat = f"¡SATURADO!\n(Año 2024)"
         else:
              texto_sat = f"¡SATURACIÓN!\nAño {int(anio_saturacion)}"
         offset_y = 600 if val_saturacion < 10000 else -1500
