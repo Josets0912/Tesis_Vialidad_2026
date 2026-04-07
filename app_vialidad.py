@@ -74,6 +74,8 @@ st.markdown("""
     .ref-table { font-size: 12px; width: 100%; border-collapse: collapse; }
     .ref-table th { background-color: #f1f3f5; border-bottom: 2px solid #dee2e6; padding: 8px; text-align: left; }
     .ref-table td { border-bottom: 1px solid #dee2e6; padding: 8px; }
+    .verdict-ok { background-color: #d4edda; color: #155724; padding: 10px; border-radius: 5px; font-weight: bold; border-left: 5px solid #28a745; }
+    .verdict-bad { background-color: #f8d7da; color: #721c24; padding: 10px; border-radius: 5px; font-weight: bold; border-left: 5px solid #dc3545; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -104,7 +106,6 @@ else:
         info_inv = datos_inv_especifico.iloc[0]
 
     # 4. CREACIÓN CONDICIONAL DE PESTAÑAS
-    # Solo mostramos diseño si es granular Y tenemos sus datos de ejes en el inventario
     mostrar_diseno = es_granular and (info_inv is not None)
     
     if mostrar_diseno:
@@ -112,10 +113,12 @@ else:
     else:
         tab_demanda = st.tabs(["📈 Análisis de Demanda"])[0]
 
+    # =========================================================================
+    # PESTAÑA 1: ANÁLISIS DE DEMANDA (INTACTA)
+    # =========================================================================
     with tab_demanda:
         st.markdown("### 🚧 Sistema de Gestión de Pavimentos y Proyección de Demanda")
         
-        # MENSAJES DE DIAGNÓSTICO
         if not es_granular:
             st.info(f"ℹ️ La pestaña de Diseño Estructural está oculta porque este sector figura con carpeta de tipo: **{carpeta}** en el censo oficial.")
         elif info_inv is None:
@@ -130,7 +133,6 @@ else:
         with c3: st.markdown(f"<div class='info-card'><div class='info-label'>Clasificación</div><div class='info-value'>{clasificacion}</div></div>", unsafe_allow_html=True)
         with c4: st.markdown(f"<div class='info-card'><div class='info-label'>Calzada</div><div class='info-value'>{calzada_info}</div></div>", unsafe_allow_html=True)
         
-        # --- CÁLCULOS PROYECCIÓN ---
         anios_censo = [2015, 2017, 2018, 2020, 2022, 2024]
         vals_censo = fila[[f'TMDA {a}' for a in anios_censo]].values.flatten().astype(float)
         datos_reales = pd.Series(vals_censo, index=anios_censo).sort_index()
@@ -250,7 +252,6 @@ else:
         st.pyplot(fig)
 
         with st.expander("📅 Ver Histórico de Tránsito y Tasas Reales (2015-2024)", expanded=False):
-            st.write("Calculado a partir de los Censos disponibles:")
             datos_hist = {'Año': anios_censo, 'TMDA Real': vals_censo.astype(int)}
             df_hist = pd.DataFrame(datos_hist)
             crecimiento = [0.0]
@@ -306,31 +307,85 @@ else:
 
         st.markdown("<br><hr><div style='text-align: center; color: #888;'><small>Creado por José Tapia - Tesis Ingeniería Civil</small></div>", unsafe_allow_html=True)
 
-    # --- PESTAÑA DE DISEÑO ---
+    # =========================================================================
+    # PESTAÑA 2: DISEÑO ESTRUCTURAL (ACTUALIZADA)
+    # =========================================================================
     if mostrar_diseno:
         with tab_diseno:
-            st.header("📏 Dimensionamiento Estructural (AASHTO 93)")
-            st.write(f"Diseño para conversión de **{carpeta}** a Pavimento Flexible.")
-            
-            col1, col2 = st.columns(2)
-            with col1:
-                st.metric("EEq 2045 (Acumulado)", f"{info_inv['EEq 2045']:,.0f}")
-                cbr = st.number_input("Ingrese CBR de Subrasante (%)", min_value=1.0, max_value=100.0, value=10.0, step=0.1)
-            
-            with col2:
-                precip = info_inv['Precipitacion promedio Mensual (mm)']
-                m = 0.8 if precip > 80 else (1.0 if precip > 40 else 1.1)
-                st.metric("Precipitación Media", f"{precip} mm/mes")
-                st.write(f"**Coeficiente de Drenaje (m):** `{m}`")
+            st.header("📏 Dimensionamiento Estructural (Método AASHTO 93)")
+            st.write(f"Cálculo de conversión de camino **{carpeta}** a Pavimento Flexible.")
+            st.markdown("---")
 
-            # Cálculo de Espesores
-            sn_req = 0.47 * np.log10(info_inv['EEq 2045'] + 1) * (1.2 / (cbr**0.15))
-            d1 = 5.0 if info_inv['EEq 2045'] < 500000 else (7.0 if info_inv['EEq 2045'] < 1500000 else 10.0)
-            d2 = 20.0
-            d3 = max(15.0, round((sn_req - (0.17 * d1) - (0.13 * d2 * m)) / (0.11 * m), 0))
+            # --- SECCIÓN 1: DATOS DE ENTRADA (Tránsito y Subrasante) ---
+            st.subheader("1. Datos de Entrada")
+            col_ent1, col_ent2 = st.columns(2)
             
-            st.subheader("🚀 Propuesta de Estructura")
+            with col_ent1:
+                eeq_diseno = info_inv['EEq 2045']
+                st.metric("Tráfico en Ejes Equivalentes (EEq 2045)", f"{eeq_diseno:,.0f}")
+                # El usuario puede modificar el CBR del suelo natural
+                cbr_subrasante = st.number_input("C.B.R. de la Subrasante (%)", min_value=1.0, max_value=100.0, value=4.0, step=0.1)
+                
+            with col_ent2:
+                precip = info_inv['Precipitacion promedio Mensual (mm)']
+                st.metric("Precipitación Promedio", f"{precip} mm/mes")
+                # Cálculo de drenaje basado en tu macro
+                m_coef = 0.8 if precip > 80 else (1.0 if precip > 40 else 1.1)
+                st.info(f"**Coeficientes de Drenaje ($m_2, m_3$):** `{m_coef}` (Calculado por clima regional)")
+
+            st.markdown("<br>", unsafe_allow_html=True)
+
+            # --- SECCIÓN 2: PROPIEDADES DE LOS MATERIALES ---
+            st.subheader("2. Propiedades de los Materiales")
+            col_mat1, col_mat2 = st.columns(2)
+            
+            with col_mat1:
+                # Controles interactivos como en tu imagen
+                cbr_base = st.slider("C.B.R. Base Granular (%)", min_value=40, max_value=100, value=80, step=5)
+                cbr_subbase = st.slider("C.B.R. Subbase Granular (%)", min_value=15, max_value=60, value=30, step=5)
+
+            with col_mat2:
+                # Fórmulas extraídas exactamente de tu Excel para calcular a2 y a3
+                a1 = 0.17  # Fijo para carpeta asfáltica
+                a2 = min(a1, 0.032 * (cbr_base ** 0.32))
+                a3 = min(a2, 0.058 * (cbr_subbase ** 0.19))
+                
+                st.markdown("**Coeficientes Estructurales ($a$):**")
+                st.write(f"- Carpeta Asfáltica ($a_1$): `{a1:.3f}`")
+                st.write(f"- Base Granular ($a_2$): `{a2:.3f}`")
+                st.write(f"- Subbase Granular ($a_3$): `{a3:.3f}`")
+
+            st.markdown("---")
+
+            # --- SECCIÓN 3: CÁLCULO DE NÚMERO ESTRUCTURAL Y ESPESORES ---
+            st.subheader("3. Propuesta de Espesores")
+            
+            # Cálculo del SN Requerido (Fórmula AASHTO simplificada)
+            sn_req = 0.47 * np.log10(eeq_diseno + 1) * (1.2 / (cbr_subrasante**0.15))
+            
+            # Lógica de cálculo de espesores (en cm)
+            d1_cm = 5.0 if eeq_diseno < 500000 else (7.0 if eeq_diseno < 1500000 else 10.0)
+            d2_cm = 20.0
+            sn_aportado_parcial = (a1 * d1_cm) + (a2 * d2_cm * m_coef)
+            d3_cm = (sn_req - sn_aportado_parcial) / (a3 * m_coef)
+            d3_cm = max(15.0, round(d3_cm, 0)) # Mínimo constructivo 15cm
+
+            # Mostrar Cajas de Espesores
             res1, res2, res3 = st.columns(3)
-            res1.success(f"**Carpeta Asfáltica:** {d1} cm")
-            res2.success(f"**Base Granular:** {d2} cm")
-            res3.success(f"**Sub-Base Granular:** {d3} cm")
+            res1.info(f"**$D_1$ - Carpeta Asfáltica**\n\n### {d1_cm} cm")
+            res2.info(f"**$D_2$ - Base Granular**\n\n### {d2_cm} cm")
+            res3.info(f"**$D_3$ - Subbase**\n\n### {d3_cm} cm")
+
+            # Validación final del Diseño (Igual al cuadro verde de "OK" de tu imagen)
+            sn_calculado = (a1 * d1_cm) + (a2 * d2_cm * m_coef) + (a3 * d3_cm * m_coef)
+            
+            st.markdown("<br>", unsafe_allow_html=True)
+            col_v1, col_v2 = st.columns(2)
+            
+            with col_v1:
+                st.metric("NE Requerido", f"{sn_req:.2f}")
+            with col_v2:
+                if sn_calculado >= sn_req:
+                    st.markdown(f"<div class='verdict-ok'>✅ OK! SN Calculado: {sn_calculado:.2f}</div>", unsafe_allow_html=True)
+                else:
+                    st.markdown(f"<div class='verdict-bad'>⚠️ INSUFICIENTE. SN Calculado: {sn_calculado:.2f}</div>", unsafe_allow_html=True)
