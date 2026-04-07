@@ -21,30 +21,35 @@ st.set_page_config(
 def cargar_datos():
     archivo_maestra = "DATA_MAESTRA_TESIS.xlsx"
     archivo_inventario = "Inventario_Rutas_Maule_Completo.xlsx"
-    try:
-        # Carga de ambos archivos (asegúrate de que los nombres coincidan en tu carpeta)
-        df_maestra = pd.read_excel(archivo_maestra)
-        df_inv = pd.read_excel(archivo_inventario)
-        
-        # LIMPIEZA DE DATOS MAESTRA
-        cols_limpiar = ['ROL', 'ROL NUEVO', 'NOMBRE DEL CAMINO', 'Sector', 'TIPO DE CARPETA', 'CLASIFICACIÓN', 'ESTACIÓN', 'CALZADA']
-        for col in cols_limpiar:
-            if col in df_maestra.columns:
-                df_maestra[col] = df_maestra[col].astype(str).str.strip()
-        
-        # CORRECCIÓN 115 CANALES
-        errores_115 = ['115 Canales', '115 CANALES', '115-Canales', '115 CH', '115-CH']
-        if 'ROL' in df_maestra.columns:
-            df_maestra['ROL'] = df_maestra['ROL'].replace(errores_115, 'Ruta 115 CH')
-        if 'ROL NUEVO' in df_maestra.columns:
-            df_maestra['ROL NUEVO'] = df_maestra['ROL NUEVO'].replace(errores_115, 'Ruta 115 CH')
+    
+    # Leemos los Excels directamente
+    df_maestra = pd.read_excel(archivo_maestra)
+    df_inv = pd.read_excel(archivo_inventario)
+    
+    # LIMPIEZA DE DATOS MAESTRA
+    cols_limpiar = ['ROL', 'ROL NUEVO', 'NOMBRE DEL CAMINO', 'Sector', 'TIPO DE CARPETA', 'CLASIFICACIÓN', 'ESTACIÓN', 'CALZADA']
+    for col in cols_limpiar:
+        if col in df_maestra.columns:
+            df_maestra[col] = df_maestra[col].astype(str).str.strip()
+    
+    # CORRECCIÓN 115 CANALES
+    errores_115 = ['115 Canales', '115 CANALES', '115-Canales', '115 CH', '115-CH']
+    if 'ROL' in df_maestra.columns:
+        df_maestra['ROL'] = df_maestra['ROL'].replace(errores_115, 'Ruta 115 CH')
+    if 'ROL NUEVO' in df_maestra.columns:
+        df_maestra['ROL NUEVO'] = df_maestra['ROL NUEVO'].replace(errores_115, 'Ruta 115 CH')
 
-        return df_maestra, df_inv
-    except Exception as e:
-        st.error(f"❌ Error Crítico al cargar archivos: {e}")
-        st.stop()
+    return df_maestra, df_inv
 
-df, df_inv = cargar_datos()
+# Extraemos el Try-Except AFUERA del caché para que Streamlit NO oculte el error
+try:
+    df, df_inv = cargar_datos()
+except Exception as e:
+    st.error(f"❌ Error al cargar los archivos: {e}")
+    st.warning("💡 Verifica lo siguiente en tu repositorio de GitHub:")
+    st.markdown("- **Nombres exactos:** Revisa mayúsculas y minúsculas (`DATA_MAESTRA_TESIS.xlsx` y `Inventario_Rutas_Maule_Completo.xlsx`).")
+    st.markdown("- **Archivo Requirements:** Asegúrate de tener `openpyxl` en tu archivo `requirements.txt`.")
+    st.stop()
 
 # --- 3. MENÚ LATERAL ---
 st.sidebar.header("🔍 Panel de Control")
@@ -52,12 +57,16 @@ st.sidebar.header("🔍 Panel de Control")
 roles = sorted(df['ROL NUEVO'].dropna().astype(str).unique())
 rol_sel = st.sidebar.selectbox("Seleccione Rol Oficial:", roles)
 
-df_rol = df[df['ROL NUEVO'] == rol_sel]
+# IMPORTANTE: Usamos .copy() para evitar que Streamlit bloquee la app por modificar un dato en caché
+df_rol = df[df['ROL NUEVO'] == rol_sel].copy() 
+
 df_rol['ETIQUETA'] = df_rol['NOMBRE DEL CAMINO'] + " (" + df_rol['ESTACIÓN'] + ")"
 tramo_sel = st.sidebar.selectbox("Seleccione Sector:", df_rol['ETIQUETA'].tolist())
 
 st.sidebar.markdown("---")
 btn_calc = st.sidebar.button("Generar Informe Técnico 🚀")
+
+# (De aquí hacia abajo mantienes todo tu código de estilos y cálculos igual)
 
 # --- ESTILOS CSS ---
 st.markdown("""
