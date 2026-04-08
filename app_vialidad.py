@@ -195,17 +195,29 @@ else:
     es_granular = any(x in rodadura_maestra for x in ["RIPIO", "GRANULAR", "TIERRA", "SUELO", "NATURAL"])
     info_inv = df_inv[df_inv['Rol'] == rol_sel].iloc[0] if not df_inv[df_inv['Rol'] == rol_sel].empty else None
 
+    # EXTRAER KM INICIAL Y FINAL (Con búsqueda flexible por si cambia el nombre de la columna en el Excel)
+    km_ini, km_fin = "No Inf", "No Inf"
+    if info_inv is not None:
+        for col in info_inv.index:
+            col_up = str(col).upper()
+            if col_up in ['KM INICIAL', 'KM_INI', 'KILOMETRO INICIAL', 'KILÓMETRO INICIAL', 'KM INICIO']:
+                km_ini = info_inv[col]
+            if col_up in ['KM FINAL', 'KM_FIN', 'KILOMETRO FINAL', 'KILÓMETRO FINAL', 'KM FIN']:
+                km_fin = info_inv[col]
+
     # TÍTULO PRINCIPAL (Visible en ambas pestañas)
     st.markdown("### 🚧 Sistema de Gestión de Pavimentos y Proyección de Demanda")
     st.title(f"📍 {nombre}")
     st.markdown(f"<div class='subtitle-sector'>Sector: {sector_especifico}</div>", unsafe_allow_html=True)
     
-    # TARJETAS DE INFORMACIÓN GENERAL
-    c1, c2, c3, c4 = st.columns(4)
+    # TARJETAS DE INFORMACIÓN GENERAL (AHORA CON 6 COLUMNAS)
+    c1, c2, c3, c4, c5, c6 = st.columns(6)
     with c1: st.markdown(f"<div class='info-card'><div class='info-label'>Rol Oficial</div><div class='info-value'>{rol_oficial}</div></div>", unsafe_allow_html=True)
     with c2: st.markdown(f"<div class='info-card'><div class='info-label'>Tipo de Carpeta</div><div class='info-value'>{carpeta}</div></div>", unsafe_allow_html=True)
     with c3: st.markdown(f"<div class='info-card'><div class='info-label'>Clasificación</div><div class='info-value'>{clasificacion}</div></div>", unsafe_allow_html=True)
     with c4: st.markdown(f"<div class='info-card'><div class='info-label'>Calzada</div><div class='info-value'>{calzada_info}</div></div>", unsafe_allow_html=True)
+    with c5: st.markdown(f"<div class='info-card'><div class='info-label'>Km Inicial</div><div class='info-value'>{km_ini}</div></div>", unsafe_allow_html=True)
+    with c6: st.markdown(f"<div class='info-card'><div class='info-label'>Km Final</div><div class='info-value'>{km_fin}</div></div>", unsafe_allow_html=True)
     st.markdown("---")
 
     # CREACIÓN DE PESTAÑAS
@@ -480,4 +492,3 @@ else:
 
     st.markdown("<br><hr>", unsafe_allow_html=True)
     st.markdown("<div style='text-align: center; color: #888;'><small>Creado por José Tapia - Tesis Ingeniería Civil</small></div>", unsafe_allow_html=True)
-
