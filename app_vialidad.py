@@ -62,9 +62,9 @@ def calcular_ee_soportado(d1, d2, d3, a1, a2, a3, m2, m3, zr_val, so_val, dpsi_v
     ne_mm = (d1 * 10 * 1 * a1) + (d2 * 10 * m2 * a2) + (d3 * 10 * m3 * a3)
     try:
         # Celda D6: Factor Beta
-        f6_beta = 0.4 + (97.81 / (ne_mm + 25.4)) ** 5.19
+        beta = 0.4 + (97.81 / (ne_mm + 25.4)) ** 5.19
         # Celda B11: Ejes Equivalentes Soportados
-        ee = ((ne_mm + 25.4) ** 9.36) * (10 ** (-16.4 + (zr_val * so_val))) * (mr_val_mpa ** 2.32) * ((dpsi_val / 2.7) ** (1 / f6_beta))
+        ee = ((ne_mm + 25.4) ** 9.36) * (10 ** (-16.4 + (zr_val * so_val))) * (mr_val_mpa ** 2.32) * ((dpsi_val / 2.7) ** (1 / beta))
         return ee
     except: 
         return 0
@@ -192,8 +192,8 @@ else:
             with col_mat2:
                 precip = info_inv['Precipitacion promedio Mensual (mm)']
                 m_sugerido = 0.8 if precip > 80 else (1.0 if precip > 40 else 1.1)
-                m2 = st.number_input(f"Coef. Drenaje Base m2", value=m_sugerido, format="%.2f")
-                m3 = st.number_input(f"Coef. Drenaje Subbase m3", value=m_sugerido, format="%.2f")
+                m2 = st.number_input(f"Coef. Drenaje Base ", value=m_sugerido, format="%.2f")
+                m3 = st.number_input(f"Coef. Drenaje Subbase ", value=m_sugerido, format="%.2f")
 
             with col_opt:
                 st.markdown("<br>", unsafe_allow_html=True)
@@ -225,7 +225,7 @@ else:
                 # EL CÁLCULO DIRECTO DEL NE (Celda F5)
                 ne_aportado = (d1 * 10 * 1 * a1) + (d2 * 10 * m2 * a2) + (d3 * 10 * m3 * a3)
                 
-                st.markdown(f"<div class='sn-box'><h4>NE Aportado (Celda F5): <b>{ne_aportado:.2f} mm</b></h4></div>", unsafe_allow_html=True)
+                st.markdown(f"<div class='sn-box'><h4>NE Aportado : <b>{ne_aportado:.2f} mm</b></h4></div>", unsafe_allow_html=True)
 
                 ee_soportado = calcular_ee_soportado(d1, d2, d3, a1, a2, a3, m2, m3, zr_val, so_val, dpsi_val, mr_val_mpa)
                 holgura = ee_soportado - eeq_val if ee_soportado > eeq_val else 0
