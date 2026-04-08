@@ -12,7 +12,7 @@ warnings.filterwarnings("ignore")
 # --- 1. CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(page_title="Gestión Vial - Tesis José Tapia", layout="wide", initial_sidebar_state="expanded")
 
-# --- FUNCIONES CACHEADAS (Para evitar que la página se reinicie/congele) ---
+# --- FUNCIONES CACHEADAS (Optimizadas para evitar reinicios) ---
 @st.cache_data
 def cargar_datos():
     df_maestra = pd.read_excel("DATA_MAESTRA_TESIS.xlsx")
@@ -33,7 +33,6 @@ def cargar_datos():
 
 @st.cache_data
 def calcular_proyeccion(serie_datos):
-    """Esta función evita que el modelo Holt-Winters se recalcule al mover un slider"""
     try:
         try:
             modelo = ExponentialSmoothing(serie_datos, trend='mul', seasonal=None, damped_trend=True).fit(damping_trend=0.92)
@@ -61,11 +60,11 @@ def calcular_proyeccion(serie_datos):
     except Exception as e:
         return None
 
-def resolver_sn_aashto(W18, ZR, So, dPSI, MR):
-    """Algoritmo matemático para resolver la ecuación AASHTO 93 y obtener el SN Requerido"""
+def resolver_sn_aashto_metric(W18, ZR, So, dPSI, MR):
+    """Calcula el Número Estructural requerido en milímetros (Sistema Métrico)"""
     if W18 <= 0 or MR <= 0: return 0.1
-    sn_min, sn_max = 0.1, 20.0
-    for _ in range(50): # Búsqueda Binaria
+    sn_min, sn_max = 0.1, 20.0 # Búsqueda en pulgadas
+    for _ in range(50):
         sn_guess = (sn_min + sn_max) / 2.0
         term1 = 9.36 * math.log10(sn_guess + 1) - 0.20
         term2 = math.log10(dPSI / 2.7) / (0.40 + (1094 / ((sn_guess + 1) ** 5.19)))
@@ -74,7 +73,8 @@ def resolver_sn_aashto(W18, ZR, So, dPSI, MR):
         
         if (10 ** log_W18_guess) > W18: sn_max = sn_guess
         else: sn_min = sn_guess
-    return (sn_min + sn_max) / 2.0
+    sn_pulgadas = (sn_min + sn_max) / 2.0
+    return sn_pulgadas * 25.4 # Retorna en mm
 
 # --- 2. CARGA DE ARCHIVOS ---
 try:
@@ -106,8 +106,8 @@ st.markdown("""
     .ref-table { font-size: 12px; width: 100%; border-collapse: collapse; }
     .ref-table th { background-color: #f1f3f5; border-bottom: 2px solid #dee2e6; padding: 8px; text-align: left; }
     .ref-table td { border-bottom: 1px solid #dee2e6; padding: 8px; }
-    .verdict-ok { background-color: #d4edda; color: #155724; padding: 15px; border-radius: 5px; font-weight: bold; border-left: 8px solid #28a745; font-size: 18px; text-align: center;}
-    .verdict-bad { background-color: #f8d7da; color: #721c24; padding: 15px; border-radius: 5px; font-weight: bold; border-left: 8px solid #dc3545; font-size: 18px; text-align: center;}
+    .verdict-ok { background-color: #d4edda; color: #155724; padding: 15px; border-radius: 5px; font-weight: bold; border-left: 8px solid #28a745; font-size: 18px; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.1);}
+    .verdict-bad { background-color: #f8d7da; color: #721c24; padding: 15px; border-radius: 5px; font-weight: bold; border-left: 8px solid #dc3545; font-size: 18px; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.1);}
     .sn-box { background-color: #e2e3e5; padding: 10px; border-radius: 5px; text-align: center; border: 1px solid #ced4da; }
 </style>
 """, unsafe_allow_html=True)
@@ -131,8 +131,8 @@ else:
     datos_inv_especifico = df_inv[df_inv['Rol'] == rol_sel].copy()
     info_inv = datos_inv_especifico.iloc[0] if not datos_inv_especifico.empty else None
 
-    # ESTABILIDAD DE PESTAÑAS: Siempre se crean ambas
-    tab_demanda, tab_diseno = st.tabs(["📈 Análisis de Demanda", "🛣️ Diseño Estructural (AASHTO)"])
+    # PESTAÑAS
+    tab_demanda, tab_diseno = st.tabs(["📈 Análisis de Demanda", "🛣️ Diseño Estructural (AASHTO 93)"])
 
     # =========================================================================
     # PESTAÑA 1: DEMANDA
@@ -164,7 +164,6 @@ else:
         serie_completa[anios_censo[-1]] = datos_reales[anios_censo[-1]]
         serie = pd.Series(serie_completa).sort_index()
         
-        # LLAMADA A LA FUNCIÓN CACHEADA (Para máxima velocidad)
         pred = calcular_proyeccion(serie)
         
         if pred is not None:
@@ -209,7 +208,7 @@ else:
             st.error("Error al calcular proyecciones.")
 
     # =========================================================================
-    # PESTAÑA 2: DISEÑO ESTRUCTURAL (NUEVO DASHBOARD TIPO AASHTO)
+    # PESTAÑA 2: DISEÑO ESTRUCTURAL INTERACTIVO (DASHBOARD)
     # =========================================================================
     with tab_diseno:
         if not es_granular:
@@ -233,7 +232,6 @@ else:
                 
                 # Conversión de Confiabilidad a Desviación Normal (Zr)
                 dict_zr = {50: 0.0, 75: -0.674, 80: -0.841, 85: -1.036, 90: -1.282, 95: -1.645, 99: -2.327}
-                # Buscar el más cercano si no es exacto
                 zr = min(dict_zr.keys(), key=lambda k: abs(k - confiabilidad_pct))
                 zr_val = dict_zr[zr]
 
@@ -242,15 +240,15 @@ else:
                 
                 cbr_subrasante = st.number_input("C.B.R. de la Subrasante (%)", min_value=1.0, max_value=100.0, value=4.0, step=0.1)
                 
-                # Cálculo de Módulo Resiliente (Ecuación típica chilena/AASHTO)
+                # Cálculo de Módulo Resiliente (Ecuación típica chilena)
                 mr_calc = 2555 * (cbr_subrasante ** 0.64)
                 mr_val = st.number_input("Módulo Resiliente (MR) psi", value=float(round(mr_calc, 2)))
 
-                # Cálculo de NE Requerido Interno
-                ne_req = resolver_sn_aashto(eeq_val, zr_val, so_val, dpsi_val, mr_val)
+                # Cálculo de NE Requerido (En milímetros, según tu Excel)
+                ne_req_mm = resolver_sn_aashto_metric(eeq_val, zr_val, so_val, dpsi_val, mr_val)
 
                 st.markdown("<br>", unsafe_allow_html=True)
-                st.markdown(f"<div class='sn-box'><h4>NE Requerido: <b>{ne_req:.2f}</b></h4></div>", unsafe_allow_html=True)
+                st.markdown(f"<div class='sn-box'><h4>NE Requerido (mm): <b>{ne_req_mm:.2f}</b></h4></div>", unsafe_allow_html=True)
 
             # --- COLUMNA DERECHA: PROPIEDADES DE MATERIALES ---
             with col_der:
@@ -258,44 +256,65 @@ else:
                 
                 col_m1, col_m2 = st.columns(2)
                 with col_m1:
-                    a1 = st.number_input("Coef. Estructural a1", value=0.170, step=0.005, format="%.3f")
-                    a2 = st.number_input("Coef. Estructural a2", value=0.130, step=0.005, format="%.3f")
-                    a3 = st.number_input("Coef. Estructural a3", value=0.110, step=0.005, format="%.3f")
+                    # Valores por defecto extraídos de tu Macro
+                    a1 = st.number_input("Coef. Estructural a1 (1/mm)", value=0.197, step=0.005, format="%.3f")
+                    a2 = st.number_input("Coef. Estructural a2 (1/mm)", value=0.090, step=0.005, format="%.3f")
+                    a3 = st.number_input("Coef. Estructural a3 (1/mm)", value=0.080, step=0.005, format="%.3f")
                 with col_m2:
-                    st.markdown("<br><br><br>", unsafe_allow_html=True) # Espaciador para alinear
-                    m2 = st.number_input("Coef. Drenaje m2", value=1.00, step=0.05, format="%.2f")
-                    m3 = st.number_input("Coef. Drenaje m3", value=1.00, step=0.05, format="%.2f")
+                    st.markdown("<br><br><br>", unsafe_allow_html=True)
+                    # El coeficiente de drenaje sugiere un valor por clima
+                    precip = info_inv['Precipitacion promedio Mensual (mm)']
+                    m_sugerido = 0.8 if precip > 80 else (1.0 if precip > 40 else 1.1)
+                    m2 = st.number_input(f"Coef. Drenaje m2", value=m_sugerido, step=0.05, format="%.2f", help="Calculado por clima regional")
+                    m3 = st.number_input(f"Coef. Drenaje m3", value=m_sugerido, step=0.05, format="%.2f")
 
             st.markdown("---")
 
-            # --- SECCIÓN INFERIOR: ESPESORES Y RESULTADO ---
-            st.subheader("🏗️ ESPESORES PROPUESTOS")
-            st.caption("Ajuste los espesores (D1, D2, D3) para cumplir con el NE Requerido. (Nota: Asumiendo fórmula SN = a * D * m)")
+            # --- SECCIÓN INFERIOR: ESPESORES Y VERIFICACIÓN (TUS FÓRMULAS EXACTAS) ---
+            st.subheader("🏗️ PROPUESTA Y VERIFICACIÓN ESTRUCTURAL")
+            st.caption("Ajuste los espesores (D1, D2, D3) para asegurar que la Capacidad Estructural supere a los Ejes de Diseño.")
 
-            col_e1, col_e2, col_e3, col_res = st.columns([1, 1, 1, 1.5])
+            col_e1, col_e2, col_e3, col_res = st.columns([1, 1, 1, 1.8])
 
             with col_e1:
-                d1 = st.number_input("D1 (Carpeta)", value=4.0, step=0.5)
-                sn1 = a1 * d1
-                st.caption(f"SN1 Aportado: {sn1:.2f}")
+                d1_cm = st.number_input("D1 (Carpeta) cm", min_value=0.0, value=5.0, step=0.5)
+                sn1_mm = a1 * (d1_cm * 10)
+                st.caption(f"Aporte: {sn1_mm:.2f} mm")
 
             with col_e2:
-                d2 = st.number_input("D2 (Base)", value=10.0, step=0.5)
-                sn2 = a2 * d2 * m2
-                st.caption(f"SN2 Aportado: {sn2:.2f}")
+                d2_cm = st.number_input("D2 (Base) cm", min_value=0.0, value=15.0, step=0.5)
+                sn2_mm = a2 * (d2_cm * 10) * m2
+                st.caption(f"Aporte: {sn2_mm:.2f} mm")
 
             with col_e3:
-                d3 = st.number_input("D3 (Subbase)", value=23.0, step=0.5)
-                sn3 = a3 * d3 * m3
-                st.caption(f"SN3 Aportado: {sn3:.2f}")
+                d3_cm = st.number_input("D3 (Subbase) cm", min_value=0.0, value=15.0, step=0.5)
+                sn3_mm = a3 * (d3_cm * 10) * m3
+                st.caption(f"Aporte: {sn3_mm:.2f} mm")
 
-            sn_total = sn1 + sn2 + sn3
+            # Equivalente a la celda F5 de tu Excel
+            sn_total_mm = sn1_mm + sn2_mm + sn3_mm
+            
+            # Equivalente a celda F6 (Factor Beta)
+            try:
+                f6_beta = 0.40 + (1094 / (((sn_total_mm / 25.4) + 1) ** 5.19))
+            except:
+                f6_beta = 1.0
+
+            # --- TRADUCCIÓN DE TU FÓRMULA B11 EXACTA ---
+            try:
+                ee_soportado = ((sn_total_mm + 25.4) ** 9.36) * (10 ** (-16.4 + (zr_val * so_val))) * (mr_val ** 2.32) * ((dpsi_val / 2.7) ** (1 / f6_beta))
+            except:
+                ee_soportado = 0
+
+            # Traducción de B13
+            holgura = ee_soportado - eeq_val if ee_soportado > eeq_val else 0
 
             with col_res:
-                st.markdown("<div style='text-align: center; color: #555; margin-bottom: 5px;'>SN Total Calculado</div>", unsafe_allow_html=True)
-                st.markdown(f"<h2 style='text-align: center; margin-top: 0;'>{sn_total:.2f}</h2>", unsafe_allow_html=True)
+                st.markdown("<div style='text-align: center; color: #555; margin-bottom: 5px; font-weight: bold;'>Capacidad (EE Soportados)</div>", unsafe_allow_html=True)
+                st.markdown(f"<h2 style='text-align: center; margin-top: 0; color: #0E1117;'>{ee_soportado:,.0f}</h2>", unsafe_allow_html=True)
                 
-                if sn_total >= ne_req:
-                    st.markdown(f"<div class='verdict-ok'>✅ OK</div>", unsafe_allow_html=True)
+                if ee_soportado >= eeq_val:
+                    st.markdown(f"<div class='verdict-ok'>✅ DISEÑO APROBADO<br><span style='font-size: 15px; font-weight: normal; color: #155724;'>Holgura: +{holgura:,.0f} EE</span></div>", unsafe_allow_html=True)
                 else:
-                    st.markdown(f"<div class='verdict-bad'>⚠️ INSUFICIENTE</div>", unsafe_allow_html=True)
+                    deficit = eeq_val - ee_soportado
+                    st.markdown(f"<div class='verdict-bad'>⚠️ INSUFICIENTE<br><span style='font-size: 15px; font-weight: normal; color: #721c24;'>Faltan soportar: {deficit:,.0f} EE</span></div>", unsafe_allow_html=True)
