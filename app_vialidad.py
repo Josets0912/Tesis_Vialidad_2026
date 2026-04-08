@@ -211,9 +211,9 @@ else:
                 try: val_km_fin = float(info_inv[col])
                 except: pass
                 
-    largo_km = abs(val_km_fin - val_km_ini) if km_ini != "No Inf" and km_fin != "No Inf" else 1.0 # Por defecto 1 km si no hay info
+    largo_km = abs(val_km_fin - val_km_ini) if km_ini != "No Inf" and km_fin != "No Inf" else 1.0
 
-    # TÍTULO PRINCIPAL (Visible en todas las pestañas)
+    # TÍTULO PRINCIPAL
     st.markdown("### 🚧 Sistema de Gestión de Pavimentos y Proyección de Demanda")
     st.title(f"📍 {nombre}")
     st.markdown(f"<div class='subtitle-sector'>Sector: {sector_especifico}</div>", unsafe_allow_html=True)
@@ -228,7 +228,7 @@ else:
     with c6: st.markdown(f"<div class='info-card'><div class='info-label'>Km Final</div><div class='info-value'>{km_fin}</div></div>", unsafe_allow_html=True)
     st.markdown("---")
 
-    # CREACIÓN DE PESTAÑAS (Ahora son 3)
+    # CREACIÓN DE PESTAÑAS
     tab_demanda, tab_diseno, tab_presupuesto = st.tabs(["📈 Análisis de Demanda y Proyección", "🛣️ Diseño Estructural (AASHTO 93)", "💰 Presupuesto Obra Gruesa"])
 
     # ==========================================
@@ -494,7 +494,7 @@ else:
 
 
     # ==========================================
-    # PESTAÑA 3: PRESUPUESTO OBRA GRUESA (NUEVA)
+    # PESTAÑA 3: PRESUPUESTO OBRA GRUESA (INTOCABLE)
     # ==========================================
     with tab_presupuesto:
         if not es_granular:
@@ -520,28 +520,23 @@ else:
             st.markdown("---")
             st.subheader("🧱 Cubicaciones Volumétricas (Según Diseño Estructural)")
             
-            # Traer datos desde memoria de la pestaña 2 (pasando de cm a metros)
+            # Extraer espesores desde memoria (pasando a metros)
             h_base_m = st.session_state.inp_d2 / 100.0
             h_sub_m = st.session_state.inp_d3 / 100.0
 
-            # --- CÁLCULOS GEOMÉTRICOS ---
-            # Superficies Sello
+            # Geometría Asfalto/Imprimación
             area_capeseal = ancho_calzada * largo_m
             area_imprimacion = ancho_imprimacion * largo_m
 
             # Geometría Base Granular
-            # Formula: (Ancho Imprimación + (Espesor Base * 1.5)) * Espesor Base * Largo
-            ancho_base_inf = ancho_imprimacion + (h_base_m * 3.0) # Ancho en la parte inferior de la base (talud 3:2 a ambos lados)
+            ancho_base_inf = ancho_imprimacion + (h_base_m * 3.0) 
             ancho_base_medio = ancho_imprimacion + (h_base_m * 1.5)
             vol_base = round(ancho_base_medio * h_base_m * largo_m, 1)
 
             # Geometría Subbase Granular
-            # Formula usuario: ((altura subbase/2)*3*2)/100 + ancho de la base inferior
-            # Simplificado: ancho_base_inf + (h_sub_m * 3.0) -> esto da el ancho inferior de subbase. 
-            # Asumiendo cálculo de área superficial según usuario:
             ancho_subbase_sup = ancho_base_inf
             ancho_subbase_inf = ancho_subbase_sup + (h_sub_m * 3.0)
-            area_subbase = ancho_subbase_sup * largo_m # Según la instrucción: $1.300 x m2
+            area_subbase = ancho_subbase_sup * largo_m 
             
             c_cub1, c_cub2, c_cub3, c_cub4 = st.columns(4)
             c_cub1.metric("Área Cape Seal", f"{area_capeseal:,.1f} m²")
@@ -552,13 +547,11 @@ else:
             st.markdown("---")
             st.subheader("💵 Valorización")
             
-            # Precios Unitarios
             pu_capeseal = 7800
             pu_imprimacion = 1500
             pu_base = 40000
             pu_subbase = 1300
 
-            # Totales
             tot_capeseal = area_capeseal * pu_capeseal
             tot_imprimacion = area_imprimacion * pu_imprimacion
             tot_base = vol_base * pu_base
@@ -575,7 +568,6 @@ else:
                     "Total ($)": [tot_capeseal, tot_imprimacion, tot_base, tot_subbase]
                 })
                 
-                # Formateo visual
                 df_visual = df_presupuesto.copy()
                 df_visual["Cantidad"] = df_visual["Cantidad"].apply(lambda x: f"{x:,.1f}".replace(',', '.'))
                 df_visual["P.U. ($)"] = df_visual["P.U. ($)"].apply(lambda x: f"${x:,.0f}".replace(',', '.'))
@@ -587,35 +579,29 @@ else:
                 st.markdown(f"<div class='money-box'>Costo Total Directo:<br><span style='font-size:30px;'>${tot_proyecto:,.0f}</span></div>".replace(',', '.'), unsafe_allow_html=True)
                 st.caption("*Costo referencial de obra gruesa en pesos chilenos. No incluye IVA, utilidades, ni obras de arte adicionales.*")
 
-            # --- DIBUJO TRANSVERSAL DIDÁCTICO ---
             st.markdown("<br>", unsafe_allow_html=True)
             st.subheader("📐 Perfil Transversal Esquemático")
             
             fig_t, ax_t = plt.subplots(figsize=(10, 3.5))
             
-            # Coordenadas (Eje X = Ancho, Eje Y = Profundidad)
-            # Cape Seal
             x_cs = [-ancho_calzada/2, ancho_calzada/2, ancho_calzada/2, -ancho_calzada/2]
             y_cs = [0, 0, -0.02, -0.02]
             
-            # Imprimación (debajo del cape seal)
             x_imp = [-ancho_imprimacion/2, ancho_imprimacion/2, ancho_imprimacion/2, -ancho_imprimacion/2]
             y_imp = [-0.02, -0.02, -0.03, -0.03]
             
-            # Base
             x_base = [-ancho_imprimacion/2, ancho_imprimacion/2, ancho_base_inf/2, -ancho_base_inf/2]
             y_base = [-0.03, -0.03, -h_base_m - 0.03, -h_base_m - 0.03]
             
-            # Subbase
             x_sub = [-ancho_base_inf/2, ancho_base_inf/2, ancho_subbase_inf/2, -ancho_subbase_inf/2]
             y_sub = [-h_base_m - 0.03, -h_base_m - 0.03, -h_base_m - h_sub_m - 0.03, -h_base_m - h_sub_m - 0.03]
             
-            ax_t.fill(x_sub, y_sub, color='#a67c52', label=f'Subbase ({st.session_state.inp_d3} cm)')
-            ax_t.fill(x_base, y_base, color='#d4b872', label=f'Base Granular ({st.session_state.inp_d2} cm)')
-            ax_t.fill(x_imp, y_imp, color='#888888')
+            # EL ORDEN INVERTIDO PARA QUE LA LEYENDA SALGA DE ARRIBA HACIA ABAJO
             ax_t.fill(x_cs, y_cs, color='#222222', label='Cape Seal')
+            ax_t.fill(x_imp, y_imp, color='#888888') # Sin etiqueta en la leyenda
+            ax_t.fill(x_base, y_base, color='#d4b872', label=f'Base Granular ({st.session_state.inp_d2} cm)')
+            ax_t.fill(x_sub, y_sub, color='#a67c52', label=f'Subbase ({st.session_state.inp_d3} cm)')
             
-            # Textos de anchos
             ax_t.text(0, 0.05, f"Ancho Calzada: {ancho_calzada} m", ha='center', fontsize=10, fontweight='bold')
             ax_t.text(0, -h_base_m/2, f"Base", ha='center', fontsize=10)
             ax_t.text(0, -h_base_m - h_sub_m/2, f"Subbase", ha='center', fontsize=10, color='white')
