@@ -75,7 +75,7 @@ def calcular_ee_soportado(d1, d2, d3, a1, a2, a3, m2, m3, zr_val, so_val, pi_val
 
 def optimizar_espesores_vba(ee_req, a1, a2, a3, m2, m3, zr_val, so_val, pi_val, pf_val, mr_val_mpa):
     for sumaTotal in range(35, 161):
-        for hAsf in range(5, 7):
+        for hAsf in range(2.5):
             for hBase in range(15, 51):
                 hSub = sumaTotal - hAsf - hBase
                 if 15 <= hSub <= 80:
