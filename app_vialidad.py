@@ -71,7 +71,7 @@ def calcular_ee_soportado(d1, d2, d3, a1, a2, a3, m2, m3, zr_val, so_val, dpsi_v
     """Traducción exacta de celda B11 de tu Excel. Requiere MR en MPa."""
     sn_mm = (a1 * d1 * 10) + (a2 * d2 * 10 * m2) + (a3 * d3 * 10 * m3)
     try:
-        # AQUÍ ESTÁ TU FÓRMULA EXACTA DEL EXCEL (Celda D6)
+        # FÓRMULA EXACTA DEL EXCEL (Celda D6: Factor Beta)
         f6_beta = 0.4 + (97.81 / (sn_mm + 25.4)) ** 5.19
         ee = ((sn_mm + 25.4) ** 9.36) * (10 ** (-16.4 + (zr_val * so_val))) * (mr_val_mpa ** 2.32) * ((dpsi_val / 2.7) ** (1 / f6_beta))
         return ee
@@ -248,10 +248,14 @@ else:
                 eeq_val = info_inv['EEq 2045']
                 st.metric("Tráfico Proyectado (EES)", f"{eeq_val:,.0f} EEq")
                 
-                cbr_subrasante = st.number_input("C.B.R. de la Subrasante (%)", min_value=1.0, max_value=100.0, value=4.0, step=0.1)
+                cbr_subrasante = st.number_input("C.B.R. de la Subrasante (%)", min_value=1.0, max_value=100.0, value=25.0, step=0.1)
                 
-                # CÁLCULO DE MR CORREGIDO A MEGA-PASCALES (MPa) PARA LA FÓRMULA -16.4
-                mr_calc_mpa = 17.61 * (cbr_subrasante ** 0.64)
+                # --- CÁLCULO DE MR CORREGIDO (TU FÓRMULA EXACTA F7) ---
+                if cbr_subrasante < 12:
+                    mr_calc_mpa = 17.6 * (cbr_subrasante ** 0.64)
+                else:
+                    mr_calc_mpa = 22.1 * (cbr_subrasante ** 0.55)
+                    
                 mr_val_mpa = st.number_input("Módulo Resiliente (MR) en MPa", value=float(round(mr_calc_mpa, 2)))
 
             with col_der:
@@ -302,7 +306,7 @@ else:
 
             st.markdown("---")
 
-            # --- ESPESORES Y VISUALIZACIÓN GRÁFICA (TU IMAGEN DE TIERRA DIVIDIDA) ---
+            # --- ESPESORES Y VISUALIZACIÓN GRÁFICA ---
             st.subheader("🏗️ Propuesta Estructural Interactiva")
             col_esp, col_graf = st.columns([1, 1.5])
 
@@ -334,7 +338,6 @@ else:
                 h_d2 = max(50, d2 * 3.5)
                 h_d3 = max(50, d3 * 3.0)
                 
-                # TU FÓRMULA EXACTA DEL EXCEL AÑADIDA AL CÁLCULO
                 sn_total_mm = (a1 * d1 * 10) + (a2 * d2 * 10 * m2) + (a3 * d3 * 10 * m3)
                 try:
                     beta_calculado = 0.4 + (97.81 / (sn_total_mm + 25.4)) ** 5.19
