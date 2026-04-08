@@ -57,7 +57,6 @@ def calcular_proyeccion(serie_datos):
         return None
 
 def calcular_so_polinomico(eeq, cv_cbr):
-    """Cálculo polinómico de So basado en el CV% del CBR y Ejes Equivalentes"""
     A5, A6, A7 = 500000, 1500000, 5000000
     cv = float(cv_cbr)
     if eeq < A5: so_calc = -0.0000007*(cv**3) + 0.00007*(cv**2) - 0.0004*cv + 0.4452
@@ -162,7 +161,7 @@ else:
 
             col_izq, col_der = st.columns([1, 1])
 
-            # DATOS DE ENTRADA
+            # DATOS DE ENTRADA GENERALES
             with col_izq:
                 eeq_val = info_inv['EEq 2045']
                 st.metric("Tráfico Proyectado (EES)", f"{eeq_val:,.0f} EEq")
@@ -172,18 +171,9 @@ else:
                 else: mr_calc_mpa = 22.1 * (cbr_subrasante ** 0.55)
                 mr_val_mpa = st.number_input("Módulo Resiliente (MR) en MPa", value=float(round(mr_calc_mpa, 2)))
 
-            # PARÁMETROS DE DISEÑO + IMAGEN So.jpg
+            # PARÁMETROS DE DISEÑO
             with col_der:
-                # Sub-columnas para poner la imagen "al lado" del título
-                col_titulo, col_img_so = st.columns([3, 1])
-                with col_titulo:
-                    st.markdown("**Parámetros de Diseño (Factores AASHTO)**")
-                with col_img_so:
-                    try:
-                        st.image("So.jpg", use_container_width=True)
-                    except:
-                        st.caption("*(Imagen So.jpg no encontrada)*")
-
+                st.markdown("**Parámetros de Diseño (Factores AASHTO)**")
                 zr_val = st.number_input("Confiabilidad (Zr)", value=-0.253, step=0.010, format="%.3f")
                 cv_cbr = st.number_input("Coef. Variación CBR (CV %)", value=50.0, step=5.0)
                 so_val = calcular_so_polinomico(eeq_val, cv_cbr)
@@ -192,23 +182,18 @@ else:
                 col_pi, col_pf = st.columns(2)
                 with col_pi: pi_val = st.number_input("Serv. Inicial (pi)", value=4.2, step=0.1)
                 with col_pf: pf_val = st.number_input("Serv. Final (pf)", value=2.0, step=0.1)
+                
+                # Desplegable para ver la imagen So.jpg en grande y legible
+                with st.expander("📚 Ver Tabla de Referencia de Confiabilidad (So)"):
+                    try:
+                        st.image("So.jpg", use_container_width=True)
+                    except:
+                        st.caption("*(Imagen So.jpg no encontrada en el directorio)*")
 
             st.markdown("---")
 
-            # MATERIALES Y MACRO + IMAGEN drenaje.jpg
+            # MATERIALES Y MACRO
             st.subheader("⚙️ Materiales y Cálculo Automático")
-            
-            # Agregamos la imagen debajo del subtítulo
-            try:
-                # Usamos columnas para que la imagen no ocupe todo el ancho de la pantalla
-                col_img_drenaje, _, _ = st.columns([2, 1, 1])
-                with col_img_drenaje:
-                    st.image("drenaje.jpg", use_container_width=True)
-            except:
-                st.caption("*(Imagen drenaje.jpg no encontrada)*")
-                
-            st.markdown("<br>", unsafe_allow_html=True)
-            
             col_mat1, col_mat2, col_opt = st.columns([1, 1, 1.2])
             
             with col_mat1:
@@ -235,6 +220,16 @@ else:
                         st.rerun()
                     else:
                         st.error("❌ No se encontró solución factible en los rangos.")
+
+            # Desplegable para ver la imagen drenaje.jpg debajo del bloque de materiales
+            with st.expander("🌧️ Ver Tabla de Referencia de Coeficientes de Drenaje"):
+                try:
+                    # Usamos columnas internas en el expander para que no se deforme en pantallas muy anchas
+                    c_img_izq, c_img_cen, c_img_der = st.columns([1, 4, 1])
+                    with c_img_cen:
+                        st.image("drenaje.jpg", use_container_width=True)
+                except:
+                    st.caption("*(Imagen drenaje.jpg no encontrada en el directorio)*")
 
             st.markdown("---")
 
