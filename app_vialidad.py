@@ -14,11 +14,9 @@ st.set_page_config(page_title="Gestión Vial - Tesis", layout="wide", initial_si
 
 if "informe_generado" not in st.session_state:
     st.session_state.informe_generado = False
-
-# Usamos directamente las "llaves" (keys) de las casillas para que se actualicen visualmente
 if "inp_d1" not in st.session_state: st.session_state.inp_d1 = 2.5
-if "inp_d2" not in st.session_state: st.session_state.inp_d2 = 15.0
-if "inp_d3" not in st.session_state: st.session_state.inp_d3 = 15.0
+if "inp_d2" not in st.session_state: st.session_state.inp_d2 = 10.0
+if "inp_d3" not in st.session_state: st.session_state.inp_d3 = 10.0
 
 # --- FUNCIONES MATEMÁTICAS ---
 @st.cache_data
@@ -78,10 +76,11 @@ def calcular_ee_soportado(d1, d2, d3, a1, a2, a3, m2, m3, zr_val, so_val, pi_val
 def optimizar_espesores_vba(ee_req, a1, a2, a3, m2, m3, zr_val, so_val, pi_val, pf_val, mr_val_mpa):
     hAsf = 2.5 # CARPETA FIJADA EN 2.5 cm PARA CAMINOS BÁSICOS
     
-    for sumaGranular in range(30, 131):
-        for hBase in range(15, 51):
+    # Iteramos desde 20 cm (10 Base + 10 Subbase)
+    for sumaGranular in range(20, 131):
+        for hBase in range(10, 51): # Mínimo constructivo AASHTO = 10 cm
             hSub = sumaGranular - hBase
-            if 15 <= hSub <= 80:
+            if 10 <= hSub <= 80: # Mínimo constructivo AASHTO = 10 cm
                 ee_dis = calcular_ee_soportado(hAsf, hBase, hSub, a1, a2, a3, m2, m3, zr_val, so_val, pi_val, pf_val, mr_val_mpa)
                 if ee_dis >= ee_req: return float(hAsf), float(hBase), float(hSub), ee_dis
     return None, None, None, None
@@ -228,13 +227,12 @@ else:
 
             with col_opt:
                 st.markdown("<br>", unsafe_allow_html=True)
-                st.info("💡 Ejecuta la macro para buscar la combinación óptima de espesores (Asfalto fijo en 2.5 cm).")
+                st.info("💡 Ejecuta la macro para buscar la combinación óptima de espesores.")
                 if st.button("🔄 Ejecutar Optimización (Macro)"):
                     opt_d1, opt_d2, opt_d3, opt_ee = optimizar_espesores_vba(
                         eeq_val, a1, a2, a3, m2, m3, zr_val, so_val, pi_val, pf_val, mr_val_mpa
                     )
                     if opt_d1 is not None:
-                        # AQUÍ ESTÁ LA MAGIA: Actualizamos directamente la memoria de las casillas
                         st.session_state.inp_d1 = float(opt_d1)
                         st.session_state.inp_d2 = float(opt_d2)
                         st.session_state.inp_d3 = float(opt_d3)
@@ -250,13 +248,13 @@ else:
             col_esp, col_graf = st.columns([1, 1.5])
 
             with col_esp:
-                # Las casillas ahora leen su propio estado (key) y se actualizarán de inmediato
-                d1 = st.number_input("Carpeta Asfáltica (cm)", step=0.5, key="inp_d1")
-                d2 = st.number_input("Base Granular (cm)", step=0.5, key="inp_d2")
-                d3 = st.number_input("Subbase Granular (cm)", step=0.5, key="inp_d3")
-                
+                # Agregado min_value=10.0 a las capas granulares, y min_value=2.5 a la carpeta
+                d1 = st.number_input("Carpeta Asfáltica (cm)", min_value=2.5, step=0.5, key="inp_d1")
+                d2 = st.number_input("Base Granular (cm)", min_value=10.0, step=0.5, key="inp_d2")
+                d3 = st.number_input("Subbase Granular (cm)", min_value=10.0, step=0.5, key="inp_d3")
+
                 ne_aportado = (d1 * 10 * 1 * a1) + (d2 * 10 * m2 * a2) + (d3 * 10 * m3 * a3)
-                st.markdown(f"<div class='sn-box'><h4>NE Aportado (Celda F5): <b>{ne_aportado:.2f} mm</b></h4></div>", unsafe_allow_html=True)
+                st.markdown(f"<div class='sn-box'><h4>NE Aportado: <b>{ne_aportado:.2f} mm</b></h4></div>", unsafe_allow_html=True)
 
                 ee_soportado = calcular_ee_soportado(d1, d2, d3, a1, a2, a3, m2, m3, zr_val, so_val, pi_val, pf_val, mr_val_mpa)
                 holgura = ee_soportado - eeq_val if ee_soportado > eeq_val else 0
