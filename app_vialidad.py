@@ -58,9 +58,9 @@ def calcular_proyeccion(serie_datos):
 
 def calcular_so_polinomico(eeq, cv_cbr):
     """Cálculo polinómico de So basado en el CV% del CBR y Ejes Equivalentes"""
-    A5 = 500000
-    A6 = 1500000
-    A7 = 5000000
+    A5 = 30000000
+    A6 = 50000000
+    A7 = 70000000
     cv = float(cv_cbr)
     
     if eeq < A5:
