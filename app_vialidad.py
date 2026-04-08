@@ -56,27 +56,26 @@ def calcular_proyeccion(serie_datos):
     except:
         return None
 
-def calcular_ee_soportado(d1, d2, d3, a1, a2, a3, m2, m3, zr_val, so_val, dpsi_val, mr_val_mpa):
+def calcular_ee_soportado(d1, d2, d3, a1, a2, a3, m2, m3, zr_val, so_val, pi_val, pf_val, mr_val_mpa):
     """Cálculo exacto de tu macro. NE solo depende de espesores y coeficientes."""
-    # Celda F5: Suma directa (espesor en mm * m * a)
     ne_mm = (d1 * 10 * 1 * a1) + (d2 * 10 * m2 * a2) + (d3 * 10 * m3 * a3)
     try:
-        # Celda D6: Factor Beta
-        beta = 0.4 + (97.81 / (ne_mm + 25.4)) ** 5.19
-        # Celda B11: Ejes Equivalentes Soportados
-        ee = ((ne_mm + 25.4) ** 9.36) * (10 ** (-16.4 + (zr_val * so_val))) * (mr_val_mpa ** 2.32) * ((dpsi_val / 2.7) ** (1 / beta))
+        f6_beta = 0.4 + (97.81 / (ne_mm + 25.4)) ** 5.19
+        
+        # === AQUÍ ESTÁ TU FÓRMULA EXACTA DEL EXCEL ===
+        # POTENCIA(Ne + 25.4, 9.36) * POTENCIA(10, -16.4+Zr*So) * Potencia(Mr, 2.32) * Potencia(((Pi - Pf)/(Pi - 1.5)), 1/beta)
+        ee = ((ne_mm + 25.4) ** 9.36) * (10 ** (-16.4 + (zr_val * so_val))) * (mr_val_mpa ** 2.32) * (((pi_val - pf_val) / (pi_val - 1.5)) ** (1 / f6_beta))
         return ee
     except: 
         return 0
 
-def optimizar_espesores_vba(ee_req, a1, a2, a3, m2, m3, zr_val, so_val, dpsi_val, mr_val_mpa):
-    """Macro original para iterar los espesores."""
+def optimizar_espesores_vba(ee_req, a1, a2, a3, m2, m3, zr_val, so_val, pi_val, pf_val, mr_val_mpa):
     for sumaTotal in range(35, 161):
         for hAsf in range(5, 7):
             for hBase in range(15, 51):
                 hSub = sumaTotal - hAsf - hBase
                 if 15 <= hSub <= 80:
-                    ee_dis = calcular_ee_soportado(hAsf, hBase, hSub, a1, a2, a3, m2, m3, zr_val, so_val, dpsi_val, mr_val_mpa)
+                    ee_dis = calcular_ee_soportado(hAsf, hBase, hSub, a1, a2, a3, m2, m3, zr_val, so_val, pi_val, pf_val, mr_val_mpa)
                     if ee_dis >= ee_req: 
                         return float(hAsf), float(hBase), float(hSub), ee_dis
     return None, None, None, None
@@ -148,7 +147,7 @@ else:
             ax.axhline(5000, color='gray', linestyle=':', alpha=0.5)
             st.pyplot(fig)
 
-    # --- PESTAÑA DISEÑO ESTRUCTURAL (CORREGIDA) ---
+    # --- PESTAÑA DISEÑO ESTRUCTURAL (CON FÓRMULA CORREGIDA) ---
     with tab_diseno:
         if not es_granular:
             st.warning(f"⚠️ Este camino ya cuenta con una superficie de **{carpeta}**. El diseño estructural inicial está deshabilitado.")
@@ -176,7 +175,13 @@ else:
                 dict_zr = {50: 0.0, 75: -0.674, 80: -0.841, 85: -1.036, 90: -1.282, 95: -1.645, 99: -2.327}
                 zr_val = dict_zr[min(dict_zr.keys(), key=lambda k: abs(k - confiabilidad_pct))]
                 so_val = st.number_input("Desviación Estándar (So)", value=0.50, step=0.01)
-                dpsi_val = st.number_input("Pérdida de Serviciabilidad (ΔPSI)", value=2.2, step=0.1)
+                
+                # SEPARACIÓN DE SERVICIABILIDAD INICIAL Y FINAL (Para respetar tu fórmula)
+                col_pi, col_pf = st.columns(2)
+                with col_pi:
+                    pi_val = st.number_input("Serv. Inicial (pi)", value=4.2, step=0.1)
+                with col_pf:
+                    pf_val = st.number_input("Serv. Final (pf)", value=2.0, step=0.1)
 
             st.markdown("---")
 
@@ -192,15 +197,15 @@ else:
             with col_mat2:
                 precip = info_inv['Precipitacion promedio Mensual (mm)']
                 m_sugerido = 0.8 if precip > 80 else (1.0 if precip > 40 else 1.1)
-                m2 = st.number_input(f"Coef. Drenaje Base ", value=m_sugerido, format="%.2f")
-                m3 = st.number_input(f"Coef. Drenaje Subbase ", value=m_sugerido, format="%.2f")
+                m2 = st.number_input(f"Coef. Drenaje Base m2", value=m_sugerido, format="%.2f")
+                m3 = st.number_input(f"Coef. Drenaje Subbase m3", value=m_sugerido, format="%.2f")
 
             with col_opt:
                 st.markdown("<br>", unsafe_allow_html=True)
                 st.info("💡 Ejecuta la macro para buscar la combinación óptima de espesores.")
                 if st.button("🔄 Ejecutar Optimización (Macro)"):
                     opt_d1, opt_d2, opt_d3, opt_ee = optimizar_espesores_vba(
-                        eeq_val, a1, a2, a3, m2, m3, zr_val, so_val, dpsi_val, mr_val_mpa
+                        eeq_val, a1, a2, a3, m2, m3, zr_val, so_val, pi_val, pf_val, mr_val_mpa
                     )
                     if opt_d1 is not None:
                         st.session_state.d1_val, st.session_state.d2_val, st.session_state.d3_val = opt_d1, opt_d2, opt_d3
@@ -225,9 +230,9 @@ else:
                 # EL CÁLCULO DIRECTO DEL NE (Celda F5)
                 ne_aportado = (d1 * 10 * 1 * a1) + (d2 * 10 * m2 * a2) + (d3 * 10 * m3 * a3)
                 
-                st.markdown(f"<div class='sn-box'><h4>NE Aportado : <b>{ne_aportado:.2f} mm</b></h4></div>", unsafe_allow_html=True)
+                st.markdown(f"<div class='sn-box'><h4>NE Aportado (Celda F5): <b>{ne_aportado:.2f} mm</b></h4></div>", unsafe_allow_html=True)
 
-                ee_soportado = calcular_ee_soportado(d1, d2, d3, a1, a2, a3, m2, m3, zr_val, so_val, dpsi_val, mr_val_mpa)
+                ee_soportado = calcular_ee_soportado(d1, d2, d3, a1, a2, a3, m2, m3, zr_val, so_val, pi_val, pf_val, mr_val_mpa)
                 holgura = ee_soportado - eeq_val if ee_soportado > eeq_val else 0
 
                 st.markdown("<br>", unsafe_allow_html=True)
