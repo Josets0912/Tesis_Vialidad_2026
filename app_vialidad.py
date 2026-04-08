@@ -16,7 +16,7 @@ if "informe_generado" not in st.session_state:
     st.session_state.informe_generado = False
 if "inp_d1" not in st.session_state: st.session_state.inp_d1 = 2.5
 if "inp_d2" not in st.session_state: st.session_state.inp_d2 = 10.0
-if "inp_d3" not in st.session_state: st.session_state.inp_d3 = 10.0
+if "inp_d3" not in st.session_state: st.session_state.inp_d3 = 15.0
 
 # --- FUNCIONES MATEMÁTICAS ---
 @st.cache_data
