@@ -244,9 +244,9 @@ else:
             col_esp, col_graf = st.columns([1, 1.5])
 
             with col_esp:
-                d1 = st.number_input("D1 (Carpeta) cm", value=st.session_state.d1_val, step=0.5, key="inp_d1")
-                d2 = st.number_input("D2 (Base) cm", value=st.session_state.d2_val, step=0.5, key="inp_d2")
-                d3 = st.number_input("D3 (Subbase) cm", value=st.session_state.d3_val, step=0.5, key="inp_d3")
+                d1 = st.number_input("Carpeta Asfáltica (cm)", value=st.session_state.d1_val, step=0.5, key="inp_d1")
+                d2 = st.number_input("Base Granular (cm)", value=st.session_state.d2_val, step=0.5, key="inp_d2")
+                d3 = st.number_input("Subbase Granular (cm)", value=st.session_state.d3_val, step=0.5, key="inp_d3")
                 
                 st.session_state.d1_val, st.session_state.d2_val, st.session_state.d3_val = d1, d2, d3
 
@@ -289,4 +289,4 @@ else:
                 </div>
                 """
                 st.markdown(html_capas, unsafe_allow_html=True)
-                st.caption("Gráfico Estratigráfico (Se ajusta en tiempo real)")
+            
