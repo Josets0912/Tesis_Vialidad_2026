@@ -56,15 +56,32 @@ def calcular_proyeccion(serie_datos):
     except:
         return None
 
+def calcular_so_polinomico(eeq, cv_cbr):
+    """Cálculo polinómico de So basado en el CV% del CBR y Ejes Equivalentes"""
+    A5 = 500000
+    A6 = 1500000
+    A7 = 5000000
+    cv = float(cv_cbr)
+    
+    if eeq < A5:
+        so_calc = -0.0000007*(cv**3) + 0.00007*(cv**2) - 0.0004*cv + 0.4452
+    elif eeq < A6:
+        so_calc = -0.0000007*(cv**3) + 0.00007*(cv**2) - 0.0004*cv + 0.4352
+    elif eeq < A7:
+        so_calc = -0.000002*(cv**3) + 0.0002*(cv**2) - 0.0051*cv + 0.4553
+    else:
+        so_calc = -0.000002*(cv**3) + 0.0002*(cv**2) - 0.0051*cv + 0.4353
+        
+    return min(0.5, so_calc)
+
 def calcular_ee_soportado(d1, d2, d3, a1, a2, a3, m2, m3, zr_val, so_val, pi_val, pf_val, mr_val_mpa):
     """Cálculo exacto de tu macro. NE solo depende de espesores y coeficientes."""
     ne_mm = (d1 * 10 * 1 * a1) + (d2 * 10 * m2 * a2) + (d3 * 10 * m3 * a3)
     try:
         f6_beta = 0.4 + (97.81 / (ne_mm + 25.4)) ** 5.19
         
-      
-      
-        ee = ((ne_mm + 25.4) ** 9.36) * (10 ** (-16.4 + (-0.253* so_val))) * (mr_val_mpa ** 2.32) * (((pi_val - pf_val) / (pi_val - 1.5)) ** (1 / f6_beta))
+        # En lugar del -0.253 fijo, usamos zr_val para que la interfaz siga funcionando.
+        ee = ((ne_mm + 25.4) ** 9.36) * (10 ** (-16.4 + (zr_val * so_val))) * (mr_val_mpa ** 2.32) * (((pi_val - pf_val) / (pi_val - 1.5)) ** (1 / f6_beta))
         return ee
     except: 
         return 0
@@ -117,7 +134,7 @@ else:
 
     tab_demanda, tab_diseno = st.tabs(["📈 Análisis de Demanda", "🛣️ Diseño Estructural (AASHTO 93)"])
 
-    # --- PESTAÑA DEMANDA (SIN CAMBIOS) ---
+    # --- PESTAÑA DEMANDA ---
     with tab_demanda:
         st.markdown("### 🚧 Sistema de Gestión de Pavimentos y Proyección de Demanda")
         st.title(f"📍 {nombre}")
@@ -171,12 +188,14 @@ else:
 
             with col_der:
                 st.markdown("**Parámetros de Diseño (Factores AASHTO)**")
-                confiabilidad_pct = st.number_input("Confiabilidad (R) %", min_value=50.0, value=95.0, step=1.0)
-                dict_zr = {50: 0.0, 75: -0.674, 80: -0.841, 85: -1.036, 90: -1.282, 95: -1.645, 99: -2.327}
-                zr_val = dict_zr[min(dict_zr.keys(), key=lambda k: abs(k - confiabilidad_pct))]
-                so_val = st.number_input("Desviación Estándar (So)", value=0.50, step=0.01)
+                # Dejamos que puedas ingresar tu Zr manualmente como -0.253 o seleccionarlo
+                zr_val = st.number_input("Confiabilidad (Zr)", value=-0.253, step=0.010, format="%.3f")
                 
-                # SEPARACIÓN DE SERVICIABILIDAD INICIAL Y FINAL (Para respetar tu fórmula)
+                # Aquí pedimos el CV% y calculamos el So con tu polinomio
+                cv_cbr = st.number_input("Coef. Variación CBR (CV %)", value=50.0, step=5.0)
+                so_val = calcular_so_polinomico(eeq_val, cv_cbr)
+                st.info(f"Desviación Estándar ($S_o$) auto-calculada: **{so_val:.4f}**")
+                
                 col_pi, col_pf = st.columns(2)
                 with col_pi:
                     pi_val = st.number_input("Serv. Inicial (pi)", value=4.2, step=0.1)
