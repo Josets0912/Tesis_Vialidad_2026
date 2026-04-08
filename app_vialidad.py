@@ -159,33 +159,23 @@ else:
             st.header("📏 MÉTODO AASHTO 93 - DISEÑO ESTRUCTURAL")
             st.markdown("---")
 
-            col_izq, col_der = st.columns([1, 1])
-
-            # DATOS DE ENTRADA
-            with col_izq:
+            # --- BLOQUE 1: DATOS DE ENTRADA ---
+            st.subheader("📝 Datos de Entrada Generales")
+            col_in1, col_in2 = st.columns(2)
+            with col_in1:
                 eeq_val = info_inv['EEq 2045']
                 st.metric("Tráfico Proyectado (EES)", f"{eeq_val:,.0f} EEq")
-                
+            with col_in2:
                 cbr_subrasante = st.number_input("C.B.R. de la Subrasante (%)", min_value=1.0, max_value=100.0, value=25.0, step=0.1)
                 if cbr_subrasante < 12: mr_calc_mpa = 17.6 * (cbr_subrasante ** 0.64)
                 else: mr_calc_mpa = 22.1 * (cbr_subrasante ** 0.55)
-                mr_val_mpa = st.number_input("Módulo Resiliente (MR) en MPa", value=float(round(mr_calc_mpa, 2)))
+                mr_val_mpa = st.number_input("Módulo Resiliente (MR) auto-calculado en MPa", value=float(round(mr_calc_mpa, 2)))
 
-            # PARÁMETROS DE DISEÑO
-            with col_der:
-                st.markdown("**Parámetros de Diseño (Factores AASHTO)**")
-                zr_val = st.number_input("Confiabilidad (Zr)", value=-0.253, step=0.010, format="%.3f")
-                cv_cbr = st.number_input("Coef. Variación CBR (CV %)", value=50.0, step=5.0)
-                so_val = calcular_so_polinomico(eeq_val, cv_cbr)
-                st.info(f"Desviación Estándar ($S_o$) auto-calculada: **{so_val:.4f}**")
-                
-                col_pi, col_pf = st.columns(2)
-                with col_pi: pi_val = st.number_input("Serv. Inicial (pi)", value=4.2, step=0.1)
-                with col_pf: pf_val = st.number_input("Serv. Final (pf)", value=2.0, step=0.1)
+            st.markdown("---")
 
-            st.markdown("<br>", unsafe_allow_html=True)
+            # --- BLOQUE 2: PARÁMETROS DE DISEÑO + IMAGEN 1 ---
+            st.subheader("📊 Parámetros de Diseño (Factores AASHTO)")
             
-            # --- IMAGEN 1: So.jpg (Fija, centrada y grande) ---
             c_so1, c_so2, c_so3 = st.columns([1, 4, 1])
             with c_so2:
                 st.markdown("<div style='text-align:center; color:#555; font-size:14px; margin-bottom:5px;'><b>Tabla de Referencia:</b> Valores de Confiabilidad y Desviación Estándar Normal (Zr)</div>", unsafe_allow_html=True)
@@ -193,13 +183,25 @@ else:
                     st.image("So.jpg", use_container_width=True)
                 except:
                     st.caption("*(Imagen So.jpg no encontrada en el directorio)*")
+            st.markdown("<br>", unsafe_allow_html=True)
+
+            col_p1, col_p2, col_p3 = st.columns(3)
+            with col_p1:
+                zr_val = st.number_input("Confiabilidad (Zr)", value=-0.253, step=0.010, format="%.3f")
+            with col_p2:
+                cv_cbr = st.number_input("Coef. Variación CBR (CV %)", value=50.0, step=5.0)
+                so_val = calcular_so_polinomico(eeq_val, cv_cbr)
+                st.info(f"Desviación ($S_o$): **{so_val:.4f}**")
+            with col_p3:
+                col_pi, col_pf = st.columns(2)
+                with col_pi: pi_val = st.number_input("Serv. Inicial (pi)", value=4.2, step=0.1)
+                with col_pf: pf_val = st.number_input("Serv. Final (pf)", value=2.0, step=0.1)
 
             st.markdown("---")
 
-            # MATERIALES Y MACRO
+            # --- BLOQUE 3: MATERIALES + IMAGEN 2 ---
             st.subheader("⚙️ Materiales y Cálculo Automático")
             
-            # --- IMAGEN 2: drenaje.jpg (Fija, centrada y grande) ---
             c_dr1, c_dr2, c_dr3 = st.columns([1, 4, 1])
             with c_dr2:
                 st.markdown("<div style='text-align:center; color:#555; font-size:14px; margin-bottom:5px;'><b>Tabla de Referencia:</b> Valores para Coeficientes de Drenaje (m)</div>", unsafe_allow_html=True)
@@ -207,11 +209,9 @@ else:
                     st.image("drenaje.jpg", use_container_width=True)
                 except:
                     st.caption("*(Imagen drenaje.jpg no encontrada en el directorio)*")
-            
             st.markdown("<br>", unsafe_allow_html=True)
-            
+
             col_mat1, col_mat2, col_opt = st.columns([1, 1, 1.2])
-            
             with col_mat1:
                 a1 = st.number_input("Coef. Asfalto (1/mm)", value=0.197, format="%.3f")
                 a2 = st.number_input("Coef. Base (1/mm)", value=0.090, format="%.3f")
@@ -239,7 +239,7 @@ else:
 
             st.markdown("---")
 
-            # ESPESORES Y VISUALIZACIÓN
+            # --- BLOQUE 4: ESPESORES Y VISUALIZACIÓN ---
             st.subheader("🏗️ Propuesta Estructural Interactiva")
             col_esp, col_graf = st.columns([1, 1.5])
 
