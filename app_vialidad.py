@@ -166,7 +166,7 @@ else:
             col_in1, col_in2 = st.columns(2)
             with col_in1:
                 eeq_val = info_inv['EEq 2045']
-                st.metric("Tráfico Proyectado (EES)", f"{eeq_val:,.0f} EEq")
+                st.metric("EJES EQUIVALENTES REQUERIDOS 2045", f"{eeq_val:,.0f} EEq")
             with col_in2:
                 cbr_subrasante = st.number_input("C.B.R. de la Subrasante (%)", min_value=1.0, max_value=100.0, value=25.0, step=0.1)
                 if cbr_subrasante < 12: mr_calc_mpa = 17.6 * (cbr_subrasante ** 0.64)
@@ -297,4 +297,4 @@ else:
                 </div>
                 """
                 st.markdown(html_capas, unsafe_allow_html=True)
-                st.caption("Gráfico Estratigráfico (Se ajusta en tiempo real)")
+
