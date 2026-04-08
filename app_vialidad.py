@@ -14,6 +14,7 @@ st.set_page_config(page_title="Gestión Vial - Tesis", layout="wide", initial_si
 
 if "informe_generado" not in st.session_state:
     st.session_state.informe_generado = False
+
 if "inp_d1" not in st.session_state: st.session_state.inp_d1 = 2.5
 if "inp_d2" not in st.session_state: st.session_state.inp_d2 = 10.0
 if "inp_d3" not in st.session_state: st.session_state.inp_d3 = 15.0
@@ -73,14 +74,15 @@ def calcular_ee_soportado(d1, d2, d3, a1, a2, a3, m2, m3, zr_val, so_val, pi_val
         return ee
     except: return 0
 
-def optimizar_espesores_vba(ee_req, a1, a2, a3, m2, m3, zr_val, so_val, pi_val, pf_val, mr_val_mpa):
-    hAsf = 2.5 # CARPETA FIJADA EN 2.5 cm PARA CAMINOS BÁSICOS
+def optimizar_espesores_vba(ee_req, a1, a2, a3, m2, m3, zr_val, so_val, pi_val, pf_val, mr_val_mpa, is_cape_seal=False):
+    # Si es Cape Seal, la estructura asfáltica es 0, si no, es 2.5 cm mínimo
+    hAsf = 0.0 if is_cape_seal else 2.5 
     
-    # Iteramos desde 20 cm (10 Base + 10 Subbase)
+    # Se itera la suma desde 25 cm (10 Base + 15 Subbase) hasta 130 cm
     for sumaGranular in range(25, 131):
-        for hBase in range(10, 51): # Mínimo constructivo AASHTO = 10 cm
+        for hBase in range(10, 51): # Mínimo Base: 10 cm
             hSub = sumaGranular - hBase
-            if 15 <= hSub <= 80: # Mínimo constructivo AASHTO = 10 cm
+            if 15 <= hSub <= 80: # Mínimo Subbase: 15 cm
                 ee_dis = calcular_ee_soportado(hAsf, hBase, hSub, a1, a2, a3, m2, m3, zr_val, so_val, pi_val, pf_val, mr_val_mpa)
                 if ee_dis >= ee_req: return float(hAsf), float(hBase), float(hSub), ee_dis
     return None, None, None, None
@@ -166,7 +168,7 @@ else:
             col_in1, col_in2 = st.columns(2)
             with col_in1:
                 eeq_val = info_inv['EEq 2045']
-                st.metric("EJES EQUIVALENTES REQUERIDOS 2045", f"{eeq_val:,.0f} EEq")
+                st.metric("Tráfico Proyectado (EES)", f"{eeq_val:,.0f} EEq")
             with col_in2:
                 cbr_subrasante = st.number_input("C.B.R. de la Subrasante (%)", min_value=1.0, max_value=100.0, value=25.0, step=0.1)
                 if cbr_subrasante < 12: mr_calc_mpa = 17.6 * (cbr_subrasante ** 0.64)
@@ -216,6 +218,8 @@ else:
             col_mat1, col_mat2, col_opt = st.columns([1, 1, 1.2])
             with col_mat1:
                 a1 = st.number_input("Coef. Asfalto (1/mm)", value=0.197, format="%.3f")
+                # NUEVO BOTÓN CAPE SEAL (Debajo del aporte del asfalto)
+                cape_seal_mode = st.checkbox("🛣️ Camino Básico (Cape Seal / TSD)", help="Desactiva el asfalto. Obliga a que la base y subbase soporten todo el peso.")
                 a2 = st.number_input("Coef. Base (1/mm)", value=0.090, format="%.3f")
                 a3 = st.number_input("Coef. Subbase (1/mm)", value=0.090, format="%.3f")
             
@@ -227,10 +231,10 @@ else:
 
             with col_opt:
                 st.markdown("<br>", unsafe_allow_html=True)
-                st.info("💡 Ejecuta la macro para buscar la combinación óptima de espesores.")
+                st.info("💡 Ejecuta la macro para buscar la combinación óptima de espesores de la tierra.")
                 if st.button("🔄 Ejecutar Optimización (Macro)"):
                     opt_d1, opt_d2, opt_d3, opt_ee = optimizar_espesores_vba(
-                        eeq_val, a1, a2, a3, m2, m3, zr_val, so_val, pi_val, pf_val, mr_val_mpa
+                        eeq_val, a1, a2, a3, m2, m3, zr_val, so_val, pi_val, pf_val, mr_val_mpa, is_cape_seal=cape_seal_mode
                     )
                     if opt_d1 is not None:
                         st.session_state.inp_d1 = float(opt_d1)
@@ -248,11 +252,16 @@ else:
             col_esp, col_graf = st.columns([1, 1.5])
 
             with col_esp:
-                # Agregado min_value=10.0 a las capas granulares, y min_value=2.5 a la carpeta
-                d1 = st.number_input("Carpeta Asfáltica (cm)", min_value=2.5, step=0.5, key="inp_d1")
+                # LÓGICA DE ACTUALIZACIÓN VISUAL (Dependiendo si es Cape Seal o Asfalto)
+                if cape_seal_mode:
+                    st.session_state.inp_d1 = 0.0
+                elif st.session_state.inp_d1 == 0.0:
+                    st.session_state.inp_d1 = 2.5 # Restaura a 2.5 cm si desmarcas la casilla
+                
+                d1 = st.number_input("Carpeta Asfáltica (cm)", min_value=0.0, step=0.5, key="inp_d1", disabled=cape_seal_mode, help="Bloqueado en 0 si está activo el modo Cape Seal.")
                 d2 = st.number_input("Base Granular (cm)", min_value=10.0, step=0.5, key="inp_d2")
-                d3 = st.number_input("Subbase Granular (cm)", min_value=10.0, step=0.5, key="inp_d3")
-
+                d3 = st.number_input("Subbase Granular (cm)", min_value=15.0, step=0.5, key="inp_d3")
+                
                 ne_aportado = (d1 * 10 * 1 * a1) + (d2 * 10 * m2 * a2) + (d3 * 10 * m3 * a3)
                 st.markdown(f"<div class='sn-box'><h4>NE Aportado: <b>{ne_aportado:.2f} mm</b></h4></div>", unsafe_allow_html=True)
 
@@ -267,7 +276,21 @@ else:
                     st.markdown(f"<div class='verdict-bad'>⚠️ INSUFICIENTE<br><span style='font-size:14px; font-weight:normal;'>Soporta solo: {ee_soportado:,.0f} EEq<br>Faltan: {deficit:,.0f} EEq</span></div>", unsafe_allow_html=True)
 
             with col_graf:
-                h_d1 = max(40, d1 * 4.5) 
+                # CAMBIO DE DIBUJO SI ES CAPE SEAL
+                if cape_seal_mode:
+                    html_asfalto = """
+                    <div style="background: linear-gradient(180deg, #333 0%, #111 100%); color: #fff; height: 30px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 13px; border-bottom: 2px solid #000;">
+                        Cape Seal / TSD (Protección Superficial)
+                    </div>
+                    """
+                else:
+                    h_d1 = max(40, d1 * 4.5) 
+                    html_asfalto = f"""
+                    <div style="background: linear-gradient(180deg, #595959 0%, #3b3b3b 100%); color: white; height: {h_d1}px; display: flex; align-items: center; justify-content: center; font-weight: bold;">
+                        Carpeta Asfáltica ({d1} cm)
+                    </div>
+                    """
+                
                 h_d2 = max(50, d2 * 3.5)
                 h_d3 = max(50, d3 * 3.0)
                 
@@ -276,9 +299,7 @@ else:
                 
                 html_capas = f"""
                 <div style="width: 100%; max-width: 400px; margin: auto; border: 3px solid #2c3e50; border-radius: 6px; overflow: hidden; text-align: center; font-family: 'Segoe UI', sans-serif; box-shadow: 0 6px 12px rgba(0,0,0,0.15);">
-                    <div style="background: linear-gradient(180deg, #595959 0%, #3b3b3b 100%); color: white; height: {h_d1}px; display: flex; align-items: center; justify-content: center; font-weight: bold;">
-                        Carpeta Asfáltica ({d1} cm)
-                    </div>
+                    {html_asfalto}
                     <div style="background: linear-gradient(180deg, #e3c988 0%, #d4b872 100%); color: #333; height: {h_d2}px; display: flex; align-items: center; justify-content: center; font-weight: bold; border-top: 2px solid #2c3e50;">
                         Base Granular ({d2} cm)
                     </div>
