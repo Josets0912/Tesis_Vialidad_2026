@@ -71,7 +71,8 @@ def calcular_ee_soportado(d1, d2, d3, a1, a2, a3, m2, m3, zr_val, so_val, dpsi_v
     """Traducción exacta de celda B11 de tu Excel. Requiere MR en MPa."""
     sn_mm = (a1 * d1 * 10) + (a2 * d2 * 10 * m2) + (a3 * d3 * 10 * m3)
     try:
-        f6_beta = 0.40 + (1094 / (((sn_mm / 25.4) + 1) ** 5.19))
+        # AQUÍ ESTÁ TU FÓRMULA EXACTA DEL EXCEL (Celda D6)
+        f6_beta = 0.4 + (97.81 / (sn_mm + 25.4)) ** 5.19
         ee = ((sn_mm + 25.4) ** 9.36) * (10 ** (-16.4 + (zr_val * so_val))) * (mr_val_mpa ** 2.32) * ((dpsi_val / 2.7) ** (1 / f6_beta))
         return ee
     except:
@@ -333,6 +334,13 @@ else:
                 h_d2 = max(50, d2 * 3.5)
                 h_d3 = max(50, d3 * 3.0)
                 
+                # TU FÓRMULA EXACTA DEL EXCEL AÑADIDA AL CÁLCULO
+                sn_total_mm = (a1 * d1 * 10) + (a2 * d2 * 10 * m2) + (a3 * d3 * 10 * m3)
+                try:
+                    beta_calculado = 0.4 + (97.81 / (sn_total_mm + 25.4)) ** 5.19
+                except:
+                    beta_calculado = 1.0
+                
                 html_capas = f"""
                 <div style="width: 100%; max-width: 400px; margin: auto; border: 3px solid #2c3e50; border-radius: 6px; overflow: hidden; text-align: center; font-family: 'Segoe UI', sans-serif; box-shadow: 0 6px 12px rgba(0,0,0,0.15);">
                     <div style="background: linear-gradient(180deg, #595959 0%, #3b3b3b 100%); color: white; height: {h_d1}px; display: flex; align-items: center; justify-content: center; font-weight: bold; letter-spacing: 0.5px;">
@@ -344,8 +352,9 @@ else:
                     <div style="background: linear-gradient(180deg, #b8865b 0%, #a67c52 100%); color: white; height: {h_d3}px; display: flex; align-items: center; justify-content: center; font-weight: bold; border-top: 2px solid #2c3e50;">
                         Subbase Granular ({d3} cm)
                     </div>
-                    <div style="background: linear-gradient(180deg, #6e4e37 0%, #4a3322 100%); color: #e0e0e0; height: 90px; display: flex; align-items: center; justify-content: center; font-weight: bold; border-top: 4px dashed #1a110b;">
-                        Suelo Subrasante (CBR {cbr_subrasante}%)
+                    <div style="background: linear-gradient(180deg, #6e4e37 0%, #4a3322 100%); color: #e0e0e0; height: 90px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-weight: bold; border-top: 4px dashed #1a110b;">
+                        <div>Suelo Subrasante (CBR {cbr_subrasante}%)</div>
+                        <div style="font-size: 11px; font-weight: normal; margin-top: 3px; opacity: 0.8;">Beta (β): {beta_calculado:.3f} | SN: {sn_total_mm:.1f} mm</div>
                     </div>
                 </div>
                 """
