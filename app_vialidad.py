@@ -16,7 +16,7 @@ if "informe_generado" not in st.session_state:
     st.session_state.informe_generado = False
 if "inp_d1" not in st.session_state: st.session_state.inp_d1 = 2.5
 if "inp_d2" not in st.session_state: st.session_state.inp_d2 = 10.0
-if "inp_d3" not in st.session_state: st.session_state.inp_d3 = 10.0
+if "inp_d3" not in st.session_state: st.session_state.inp_d3 = 15.0
 
 # --- FUNCIONES MATEMÁTICAS ---
 @st.cache_data
@@ -76,11 +76,11 @@ def calcular_ee_soportado(d1, d2, d3, a1, a2, a3, m2, m3, zr_val, so_val, pi_val
 def optimizar_espesores_vba(ee_req, a1, a2, a3, m2, m3, zr_val, so_val, pi_val, pf_val, mr_val_mpa):
     hAsf = 2.5 # CARPETA FIJADA EN 2.5 cm PARA CAMINOS BÁSICOS
     
-    # Iteramos desde 20 cm (10 Base + 10 Subbase)
-    for sumaGranular in range(20, 131):
+    # Iteramos desde 25 cm (10 Base + 15 Subbase)
+    for sumaGranular in range(25, 131):
         for hBase in range(10, 51): # Mínimo constructivo AASHTO = 10 cm
             hSub = sumaGranular - hBase
-            if 10 <= hSub <= 80: # Mínimo constructivo AASHTO = 10 cm
+            if 15 <= hSub <= 80: # Mínimo constructivo AASHTO = 15 cm para subbase
                 ee_dis = calcular_ee_soportado(hAsf, hBase, hSub, a1, a2, a3, m2, m3, zr_val, so_val, pi_val, pf_val, mr_val_mpa)
                 if ee_dis >= ee_req: return float(hAsf), float(hBase), float(hSub), ee_dis
     return None, None, None, None
@@ -171,7 +171,9 @@ else:
                 cbr_subrasante = st.number_input("C.B.R. de la Subrasante (%)", min_value=1.0, max_value=100.0, value=25.0, step=0.1)
                 if cbr_subrasante < 12: mr_calc_mpa = 17.6 * (cbr_subrasante ** 0.64)
                 else: mr_calc_mpa = 22.1 * (cbr_subrasante ** 0.55)
-                mr_val_mpa = st.number_input("Módulo Resiliente (MR) auto-calculado en MPa", value=float(round(mr_calc_mpa, 2)))
+                # MR visualmente estático
+                st.info(f"Módulo Resiliente (MR) auto-calculado: **{mr_calc_mpa:.2f} MPa**")
+                mr_val_mpa = float(round(mr_calc_mpa, 2))
 
             st.markdown("---")
 
@@ -215,7 +217,11 @@ else:
 
             col_mat1, col_mat2, col_opt = st.columns([1, 1, 1.2])
             with col_mat1:
-                a1 = st.number_input("Coef. Asfalto (1/mm)", value=0.197, format="%.3f")
+                # Checkbox Cape Seal
+                is_cape_seal = st.checkbox("Camino Básico (Cape Seal)")
+                val_a1 = 0.000 if is_cape_seal else 0.197
+                
+                a1 = st.number_input("Coef. Asfalto (1/mm)", value=val_a1, disabled=True, format="%.3f")
                 a2 = st.number_input("Coef. Base (1/mm)", value=0.090, format="%.3f")
                 a3 = st.number_input("Coef. Subbase (1/mm)", value=0.090, format="%.3f")
             
@@ -248,10 +254,9 @@ else:
             col_esp, col_graf = st.columns([1, 1.5])
 
             with col_esp:
-                # Agregado min_value=10.0 a las capas granulares, y min_value=2.5 a la carpeta
                 d1 = st.number_input("Carpeta Asfáltica (cm)", min_value=2.5, step=0.5, key="inp_d1")
                 d2 = st.number_input("Base Granular (cm)", min_value=10.0, step=0.5, key="inp_d2")
-                d3 = st.number_input("Subbase Granular (cm)", min_value=10.0, step=0.5, key="inp_d3")
+                d3 = st.number_input("Subbase Granular (cm)", min_value=15.0, step=0.5, key="inp_d3")
 
                 ne_aportado = (d1 * 10 * 1 * a1) + (d2 * 10 * m2 * a2) + (d3 * 10 * m3 * a3)
                 st.markdown(f"<div class='sn-box'><h4>NE Aportado: <b>{ne_aportado:.2f} mm</b></h4></div>", unsafe_allow_html=True)
