@@ -14,7 +14,8 @@ st.set_page_config(page_title="Gestión Vial - Tesis", layout="wide", initial_si
 
 if "informe_generado" not in st.session_state:
     st.session_state.informe_generado = False
-if "d1_val" not in st.session_state: st.session_state.d1_val = 5.0
+# Se fija el valor inicial de la carpeta en 2.5 cm para Caminos Básicos
+if "d1_val" not in st.session_state: st.session_state.d1_val = 2.5
 if "d2_val" not in st.session_state: st.session_state.d2_val = 15.0
 if "d3_val" not in st.session_state: st.session_state.d3_val = 15.0
 
@@ -74,13 +75,16 @@ def calcular_ee_soportado(d1, d2, d3, a1, a2, a3, m2, m3, zr_val, so_val, pi_val
     except: return 0
 
 def optimizar_espesores_vba(ee_req, a1, a2, a3, m2, m3, zr_val, so_val, pi_val, pf_val, mr_val_mpa):
-    for sumaTotal in range(35, 161):
-        for hAsf in range(2.4,2.6):
-            for hBase in range(15, 51):
-                hSub = sumaTotal - hAsf - hBase
-                if 15 <= hSub <= 80:
-                    ee_dis = calcular_ee_soportado(hAsf, hBase, hSub, a1, a2, a3, m2, m3, zr_val, so_val, pi_val, pf_val, mr_val_mpa)
-                    if ee_dis >= ee_req: return float(hAsf), float(hBase), float(hSub), ee_dis
+    hAsf = 2.5 # CARPETA FIJADA EN 2.5 cm PARA CAMINOS BÁSICOS
+    
+    # Se itera solo la suma del material granular (Base + Subbase) desde 30 cm hasta 130 cm
+    for sumaGranular in range(30, 131):
+        for hBase in range(15, 51):
+            hSub = sumaGranular - hBase
+            if 15 <= hSub <= 80:
+                ee_dis = calcular_ee_soportado(hAsf, hBase, hSub, a1, a2, a3, m2, m3, zr_val, so_val, pi_val, pf_val, mr_val_mpa)
+                if ee_dis >= ee_req: 
+                    return float(hAsf), float(hBase), float(hSub), ee_dis
     return None, None, None, None
 
 # --- CARGA Y SIDEBAR ---
@@ -225,7 +229,7 @@ else:
 
             with col_opt:
                 st.markdown("<br>", unsafe_allow_html=True)
-                st.info("💡 Ejecuta la macro para buscar la combinación óptima de espesores.")
+                st.info("💡 Ejecuta la macro para buscar la combinación óptima de espesores (Asfalto fijo en 2.5 cm).")
                 if st.button("🔄 Ejecutar Optimización (Macro)"):
                     opt_d1, opt_d2, opt_d3, opt_ee = optimizar_espesores_vba(
                         eeq_val, a1, a2, a3, m2, m3, zr_val, so_val, pi_val, pf_val, mr_val_mpa
@@ -244,9 +248,10 @@ else:
             col_esp, col_graf = st.columns([1, 1.5])
 
             with col_esp:
-                d1 = st.number_input("Carpeta Asfáltica (cm)", value=st.session_state.d1_val, step=0.5, key="inp_d1")
-                d2 = st.number_input("Base Granular (cm)", value=st.session_state.d2_val, step=0.5, key="inp_d2")
-                d3 = st.number_input("Subbase Granular (cm)", value=st.session_state.d3_val, step=0.5, key="inp_d3")
+                # El input ahora viene fijado a 2.5 cm por defecto
+                d1 = st.number_input("Carpeta Asfáltica (cm)", value=float(st.session_state.d1_val), step=0.5, key="inp_d1")
+                d2 = st.number_input("Base Granular (cm)", value=float(st.session_state.d2_val), step=0.5, key="inp_d2")
+                d3 = st.number_input("Subbase Granular (cm)", value=float(st.session_state.d3_val), step=0.5, key="inp_d3")
                 
                 st.session_state.d1_val, st.session_state.d2_val, st.session_state.d3_val = d1, d2, d3
 
@@ -289,4 +294,4 @@ else:
                 </div>
                 """
                 st.markdown(html_capas, unsafe_allow_html=True)
-            
+                st.caption("Gráfico Estratigráfico (Se ajusta en tiempo real)")
