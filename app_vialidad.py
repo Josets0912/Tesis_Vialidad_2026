@@ -58,33 +58,21 @@ def calcular_proyeccion(serie_datos):
 
 def calcular_so_polinomico(eeq, cv_cbr):
     """Cálculo polinómico de So basado en el CV% del CBR y Ejes Equivalentes"""
-    A5 = 30000000
-    A6 = 50000000
-    A7 = 70000000
+    A5, A6, A7 = 500000, 1500000, 5000000
     cv = float(cv_cbr)
-    
-    if eeq < A5:
-        so_calc = -0.0000007*(cv**3) + 0.00007*(cv**2) - 0.0004*cv + 0.4452
-    elif eeq < A6:
-        so_calc = -0.0000007*(cv**3) + 0.00007*(cv**2) - 0.0004*cv + 0.4352
-    elif eeq < A7:
-        so_calc = -0.000002*(cv**3) + 0.0002*(cv**2) - 0.0051*cv + 0.4553
-    else:
-        so_calc = -0.000002*(cv**3) + 0.0002*(cv**2) - 0.0051*cv + 0.4353
-        
+    if eeq < A5: so_calc = -0.0000007*(cv**3) + 0.00007*(cv**2) - 0.0004*cv + 0.4452
+    elif eeq < A6: so_calc = -0.0000007*(cv**3) + 0.00007*(cv**2) - 0.0004*cv + 0.4352
+    elif eeq < A7: so_calc = -0.000002*(cv**3) + 0.0002*(cv**2) - 0.0051*cv + 0.4553
+    else: so_calc = -0.000002*(cv**3) + 0.0002*(cv**2) - 0.0051*cv + 0.4353
     return min(0.5, so_calc)
 
 def calcular_ee_soportado(d1, d2, d3, a1, a2, a3, m2, m3, zr_val, so_val, pi_val, pf_val, mr_val_mpa):
-    """Cálculo exacto de tu macro. NE solo depende de espesores y coeficientes."""
     ne_mm = (d1 * 10 * 1 * a1) + (d2 * 10 * m2 * a2) + (d3 * 10 * m3 * a3)
     try:
         f6_beta = 0.4 + (97.81 / (ne_mm + 25.4)) ** 5.19
-        
-        # En lugar del -0.253 fijo, usamos zr_val para que la interfaz siga funcionando.
         ee = ((ne_mm + 25.4) ** 9.36) * (10 ** (-16.4 + (zr_val * so_val))) * (mr_val_mpa ** 2.32) * (((pi_val - pf_val) / (pi_val - 1.5)) ** (1 / f6_beta))
         return ee
-    except: 
-        return 0
+    except: return 0
 
 def optimizar_espesores_vba(ee_req, a1, a2, a3, m2, m3, zr_val, so_val, pi_val, pf_val, mr_val_mpa):
     for sumaTotal in range(35, 161):
@@ -93,8 +81,7 @@ def optimizar_espesores_vba(ee_req, a1, a2, a3, m2, m3, zr_val, so_val, pi_val, 
                 hSub = sumaTotal - hAsf - hBase
                 if 15 <= hSub <= 80:
                     ee_dis = calcular_ee_soportado(hAsf, hBase, hSub, a1, a2, a3, m2, m3, zr_val, so_val, pi_val, pf_val, mr_val_mpa)
-                    if ee_dis >= ee_req: 
-                        return float(hAsf), float(hBase), float(hSub), ee_dis
+                    if ee_dis >= ee_req: return float(hAsf), float(hBase), float(hSub), ee_dis
     return None, None, None, None
 
 # --- CARGA Y SIDEBAR ---
@@ -112,8 +99,7 @@ df_rol['ETIQUETA'] = df_rol['NOMBRE DEL CAMINO'] + " (" + df_rol['ESTACIÓN'] + 
 tramo_sel = st.sidebar.selectbox("Seleccione Sector:", df_rol['ETIQUETA'].tolist())
 
 st.sidebar.markdown("---")
-if st.sidebar.button("Generar Informe Técnico 🚀"): 
-    st.session_state.informe_generado = True
+if st.sidebar.button("Generar Informe Técnico 🚀"): st.session_state.informe_generado = True
 
 st.markdown("<style>.info-card{background-color:#f8f9fa; padding:15px; border-radius:8px; border:1px solid #dee2e6; text-align:left;} .verdict-ok{background-color:#d4edda; color:#155724; padding:15px; border-radius:5px; font-weight:bold; border-left:8px solid #28a745; font-size:16px; text-align:center;} .verdict-bad{background-color:#f8d7da; color:#721c24; padding:15px; border-radius:5px; font-weight:bold; border-left:8px solid #dc3545; font-size:16px; text-align:center;} .sn-box{background-color:#e2e3e5; padding:10px; border-radius:5px; text-align:center; border:1px solid #ced4da; margin-top:10px;}</style>", unsafe_allow_html=True)
 
@@ -176,7 +162,7 @@ else:
 
             col_izq, col_der = st.columns([1, 1])
 
-            # DATOS DE ENTRADA GENERALES
+            # DATOS DE ENTRADA
             with col_izq:
                 eeq_val = info_inv['EEq 2045']
                 st.metric("Tráfico Proyectado (EES)", f"{eeq_val:,.0f} EEq")
@@ -186,26 +172,43 @@ else:
                 else: mr_calc_mpa = 22.1 * (cbr_subrasante ** 0.55)
                 mr_val_mpa = st.number_input("Módulo Resiliente (MR) en MPa", value=float(round(mr_calc_mpa, 2)))
 
+            # PARÁMETROS DE DISEÑO + IMAGEN So.jpg
             with col_der:
-                st.markdown("**Parámetros de Diseño (Factores AASHTO)**")
-                # Dejamos que puedas ingresar tu Zr manualmente como -0.253 o seleccionarlo
+                # Sub-columnas para poner la imagen "al lado" del título
+                col_titulo, col_img_so = st.columns([3, 1])
+                with col_titulo:
+                    st.markdown("**Parámetros de Diseño (Factores AASHTO)**")
+                with col_img_so:
+                    try:
+                        st.image("So.jpg", use_container_width=True)
+                    except:
+                        st.caption("*(Imagen So.jpg no encontrada)*")
+
                 zr_val = st.number_input("Confiabilidad (Zr)", value=-0.253, step=0.010, format="%.3f")
-                
-                # Aquí pedimos el CV% y calculamos el So con tu polinomio
                 cv_cbr = st.number_input("Coef. Variación CBR (CV %)", value=50.0, step=5.0)
                 so_val = calcular_so_polinomico(eeq_val, cv_cbr)
                 st.info(f"Desviación Estándar ($S_o$) auto-calculada: **{so_val:.4f}**")
                 
                 col_pi, col_pf = st.columns(2)
-                with col_pi:
-                    pi_val = st.number_input("Serv. Inicial (pi)", value=4.2, step=0.1)
-                with col_pf:
-                    pf_val = st.number_input("Serv. Final (pf)", value=2.0, step=0.1)
+                with col_pi: pi_val = st.number_input("Serv. Inicial (pi)", value=4.2, step=0.1)
+                with col_pf: pf_val = st.number_input("Serv. Final (pf)", value=2.0, step=0.1)
 
             st.markdown("---")
 
-            # MATERIALES Y MACRO
+            # MATERIALES Y MACRO + IMAGEN drenaje.jpg
             st.subheader("⚙️ Materiales y Cálculo Automático")
+            
+            # Agregamos la imagen debajo del subtítulo
+            try:
+                # Usamos columnas para que la imagen no ocupe todo el ancho de la pantalla
+                col_img_drenaje, _, _ = st.columns([2, 1, 1])
+                with col_img_drenaje:
+                    st.image("drenaje.jpg", use_container_width=True)
+            except:
+                st.caption("*(Imagen drenaje.jpg no encontrada)*")
+                
+            st.markdown("<br>", unsafe_allow_html=True)
+            
             col_mat1, col_mat2, col_opt = st.columns([1, 1, 1.2])
             
             with col_mat1:
@@ -246,9 +249,7 @@ else:
                 
                 st.session_state.d1_val, st.session_state.d2_val, st.session_state.d3_val = d1, d2, d3
 
-                # EL CÁLCULO DIRECTO DEL NE (Celda F5)
                 ne_aportado = (d1 * 10 * 1 * a1) + (d2 * 10 * m2 * a2) + (d3 * 10 * m3 * a3)
-                
                 st.markdown(f"<div class='sn-box'><h4>NE Aportado (Celda F5): <b>{ne_aportado:.2f} mm</b></h4></div>", unsafe_allow_html=True)
 
                 ee_soportado = calcular_ee_soportado(d1, d2, d3, a1, a2, a3, m2, m3, zr_val, so_val, pi_val, pf_val, mr_val_mpa)
