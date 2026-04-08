@@ -9,10 +9,9 @@ import warnings
 
 warnings.filterwarnings("ignore")
 
-# --- 1. CONFIGURACIÓN DE PÁGINA ---
-st.set_page_config(page_title="Gestión Vial - Tesis José Tapia", layout="wide", initial_sidebar_state="expanded")
+# --- 1. CONFIGURACIÓN Y MEMORIA (Evita que la página se reinicie) ---
+st.set_page_config(page_title="Gestión Vial - Tesis", layout="wide", initial_sidebar_state="expanded")
 
-# --- MEMORIA DE LA APLICACIÓN (Soluciona que la app vuelva al inicio) ---
 if "informe_generado" not in st.session_state:
     st.session_state.informe_generado = False
 if "d1_val" not in st.session_state:
@@ -22,7 +21,7 @@ if "d2_val" not in st.session_state:
 if "d3_val" not in st.session_state:
     st.session_state.d3_val = 15.0
 
-# --- FUNCIONES MATEMÁTICAS Y CACHÉ ---
+# --- FUNCIONES MATEMÁTICAS (TRADUCCIÓN EXACTA DE TU EXCEL) ---
 @st.cache_data
 def cargar_datos():
     df_maestra = pd.read_excel("DATA_MAESTRA_TESIS.xlsx")
@@ -33,8 +32,7 @@ def cargar_datos():
         if col in df_maestra.columns:
             df_maestra[col] = df_maestra[col].astype(str).str.strip()
             
-    if 'Rol' in df_inv.columns:
-        df_inv['Rol'] = df_inv['Rol'].astype(str).str.strip()
+    if 'Rol' in df_inv.columns: df_inv['Rol'] = df_inv['Rol'].astype(str).str.strip()
     
     errores_115 = ['115 Canales', '115 CANALES', '115-Canales', '115 CH', '115-CH']
     if 'ROL' in df_maestra.columns: df_maestra['ROL'] = df_maestra['ROL'].replace(errores_115, 'Ruta 115 CH')
@@ -65,29 +63,39 @@ def calcular_proyeccion(serie_datos):
             if val < piso: val = piso
             else: piso = val
             pred_ajustada.append(val)
-            
         return pd.Series(pred_ajustada, index=anios_fut)
-    except Exception as e:
+    except:
         return None
 
-def calcular_ee_soportado(d1, d2, d3, a1, a2, a3, m2, m3, zr_val, so_val, dpsi_val, mr_val):
-    """Función de cálculo aislada para usarla en la macro de optimización"""
+def calcular_ee_soportado(d1, d2, d3, a1, a2, a3, m2, m3, zr_val, so_val, dpsi_val, mr_val_mpa):
+    """Traducción exacta de celda B11 de tu Excel. Requiere MR en MPa."""
     sn_mm = (a1 * d1 * 10) + (a2 * d2 * 10 * m2) + (a3 * d3 * 10 * m3)
     try:
         f6_beta = 0.40 + (1094 / (((sn_mm / 25.4) + 1) ** 5.19))
-        ee = ((sn_mm + 25.4) ** 9.36) * (10 ** (-16.4 + (zr_val * so_val))) * (mr_val ** 2.32) * ((dpsi_val / 2.7) ** (1 / f6_beta))
+        ee = ((sn_mm + 25.4) ** 9.36) * (10 ** (-16.4 + (zr_val * so_val))) * (mr_val_mpa ** 2.32) * ((dpsi_val / 2.7) ** (1 / f6_beta))
         return ee
     except:
         return 0
 
-def optimizar_espesores_vba(ee_req, a1, a2, a3, m2, m3, zr_val, so_val, dpsi_val, mr_val):
-    """Traducción exacta de tu Macro Optimizar_Caminos_Basicos de VBA a Python"""
+def resolver_sn_aashto_metric(W18, ZR, So, dPSI, MR_MPa):
+    """Calcula el NE Requerido exacto invirtiendo tu fórmula B11"""
+    if W18 <= 0 or MR_MPa <= 0: return 0.1
+    sn_min, sn_max = 0.1, 500.0 # Búsqueda en mm
+    for _ in range(60):
+        sn_guess_mm = (sn_min + sn_max) / 2.0
+        ee_guess = calcular_ee_soportado(sn_guess_mm/10, 0, 0, 1, 0, 0, 1, 1, ZR, So, dPSI, MR_MPa)
+        if ee_guess > W18: sn_max = sn_guess_mm
+        else: sn_min = sn_guess_mm
+    return (sn_min + sn_max) / 2.0
+
+def optimizar_espesores_vba(ee_req, a1, a2, a3, m2, m3, zr_val, so_val, dpsi_val, mr_val_mpa):
+    """Tu Macro de VBA traducida a Python (Itera espesores)"""
     for sumaTotal in range(35, 161):
         for hAsf in range(5, 7): # De 5 a 6 cm
             for hBase in range(15, 51): # De 15 a 50 cm
                 hSub = sumaTotal - hAsf - hBase
                 if 15 <= hSub <= 80:
-                    ee_dis = calcular_ee_soportado(hAsf, hBase, hSub, a1, a2, a3, m2, m3, zr_val, so_val, dpsi_val, mr_val)
+                    ee_dis = calcular_ee_soportado(hAsf, hBase, hSub, a1, a2, a3, m2, m3, zr_val, so_val, dpsi_val, mr_val_mpa)
                     if ee_dis >= ee_req:
                         return float(hAsf), float(hBase), float(hSub), ee_dis
     return None, None, None, None
@@ -109,7 +117,7 @@ df_rol['ETIQUETA'] = df_rol['NOMBRE DEL CAMINO'] + " (" + df_rol['ESTACIÓN'] + 
 tramo_sel = st.sidebar.selectbox("Seleccione Sector:", df_rol['ETIQUETA'].tolist())
 
 st.sidebar.markdown("---")
-# Aquí grabamos en la "memoria" si se presionó el botón
+# GRABAMOS EN MEMORIA SI SE PRESIONA EL BOTÓN
 if st.sidebar.button("Generar Informe Técnico 🚀"):
     st.session_state.informe_generado = True
 
@@ -121,12 +129,12 @@ st.markdown("""
     .info-value { font-size: 15px; color: #212529; font-weight: 600; line-height: 1.4; }
     .rate-box { background-color: #e8f4f8; padding: 10px; border-radius: 5px; border-left: 5px solid #17a2b8; margin-bottom: 15px; color: #0c5460; font-weight: 500; }
     .subtitle-sector { color: #555; font-size: 20px; margin-top: -20px; margin-bottom: 20px; font-weight: 500; }
-    .verdict-ok { background-color: #d4edda; color: #155724; padding: 15px; border-radius: 5px; font-weight: bold; border-left: 8px solid #28a745; font-size: 18px; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.1);}
-    .verdict-bad { background-color: #f8d7da; color: #721c24; padding: 15px; border-radius: 5px; font-weight: bold; border-left: 8px solid #dc3545; font-size: 18px; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.1);}
+    .verdict-ok { background-color: #d4edda; color: #155724; padding: 15px; border-radius: 5px; font-weight: bold; border-left: 8px solid #28a745; font-size: 16px; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.1);}
+    .verdict-bad { background-color: #f8d7da; color: #721c24; padding: 15px; border-radius: 5px; font-weight: bold; border-left: 8px solid #dc3545; font-size: 16px; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.1);}
+    .sn-box { background-color: #e2e3e5; padding: 10px; border-radius: 5px; text-align: center; border: 1px solid #ced4da; }
 </style>
 """, unsafe_allow_html=True)
 
-# Lógica de mostrar inicio o reporte
 if not st.session_state.informe_generado:
     st.markdown("<br><br><h1 style='text-align: center;'>🚧 Sistema de Gestión de Pavimentos</h1>", unsafe_allow_html=True)
     st.markdown("<h3 style='text-align: center; color: #1f77b4;'>Desarrollado por José Tapia</h3>", unsafe_allow_html=True)
@@ -240,8 +248,10 @@ else:
                 st.metric("Tráfico Proyectado (EES)", f"{eeq_val:,.0f} EEq")
                 
                 cbr_subrasante = st.number_input("C.B.R. de la Subrasante (%)", min_value=1.0, max_value=100.0, value=4.0, step=0.1)
-                mr_calc = 2555 * (cbr_subrasante ** 0.64)
-                mr_val = st.number_input("Módulo Resiliente (MR) psi", value=float(round(mr_calc, 2)))
+                
+                # CÁLCULO DE MR CORREGIDO A MEGA-PASCALES (MPa) PARA LA FÓRMULA -16.4
+                mr_calc_mpa = 17.61 * (cbr_subrasante ** 0.64)
+                mr_val_mpa = st.number_input("Módulo Resiliente (MR) en MPa", value=float(round(mr_calc_mpa, 2)))
 
             with col_der:
                 st.markdown("**Parámetros de Diseño**")
@@ -250,17 +260,21 @@ else:
                 zr_val = dict_zr[min(dict_zr.keys(), key=lambda k: abs(k - confiabilidad_pct))]
                 so_val = st.number_input("Desviación Estándar (So)", value=0.45, step=0.01)
                 dpsi_val = st.number_input("Pérdida de Serviciabilidad (ΔPSI)", value=2.2, step=0.1)
+                
+                # Mostrar el NE Requerido exacto calculado a la inversa
+                ne_req_mm = resolver_sn_aashto_metric(eeq_val, zr_val, so_val, dpsi_val, mr_val_mpa)
+                st.markdown(f"<div class='sn-box'><h4>NE Requerido (mm): <b>{ne_req_mm:.2f}</b></h4></div>", unsafe_allow_html=True)
 
             st.markdown("---")
 
-            # --- MATERIALES Y OPTIMIZACIÓN ---
+            # --- MATERIALES Y BOTÓN MACRO ---
             st.subheader("⚙️ Materiales y Cálculo Automático")
-            col_mat1, col_mat2, col_opt = st.columns([1, 1, 1])
+            col_mat1, col_mat2, col_opt = st.columns([1, 1, 1.2])
             
             with col_mat1:
-                a1 = st.number_input("Coef. Asfalto a1", value=0.197, format="%.3f")
-                a2 = st.number_input("Coef. Base a2", value=0.090, format="%.3f")
-                a3 = st.number_input("Coef. Subbase a3", value=0.080, format="%.3f")
+                a1 = st.number_input("Coef. Asfalto a1 (1/mm)", value=0.197, format="%.3f")
+                a2 = st.number_input("Coef. Base a2 (1/mm)", value=0.090, format="%.3f")
+                a3 = st.number_input("Coef. Subbase a3 (1/mm)", value=0.090, format="%.3f")
             
             with col_mat2:
                 precip = info_inv['Precipitacion promedio Mensual (mm)']
@@ -268,70 +282,72 @@ else:
                 m2 = st.number_input(f"Coef. Drenaje Base m2", value=m_sugerido, format="%.2f")
                 m3 = st.number_input(f"Coef. Drenaje Subbase m3", value=m_sugerido, format="%.2f")
 
-            # BOTÓN DE MACRO INTEGRADA
             with col_opt:
                 st.markdown("<br>", unsafe_allow_html=True)
-                st.info("Ejecuta la macro de iteración para encontrar los espesores mínimos.")
+                st.info("💡 Ejecuta la iteración para buscar la combinación óptima de espesores.")
+                # BOTÓN QUE ACTIVA LA MACRO TRADUCIDA
                 if st.button("🔄 Ejecutar Optimización (Macro)"):
                     opt_d1, opt_d2, opt_d3, opt_ee = optimizar_espesores_vba(
-                        eeq_val, a1, a2, a3, m2, m3, zr_val, so_val, dpsi_val, mr_val
+                        eeq_val, a1, a2, a3, m2, m3, zr_val, so_val, dpsi_val, mr_val_mpa
                     )
                     if opt_d1 is not None:
-                        # Guardamos los resultados en la "memoria" de Streamlit
                         st.session_state.d1_val = opt_d1
                         st.session_state.d2_val = opt_d2
                         st.session_state.d3_val = opt_d3
-                        st.success("¡Diseño óptimo encontrado!")
-                        st.rerun() # Fuerza la actualización de la página con los nuevos valores
+                        st.success("✅ ¡Diseño óptimo encontrado!")
+                        st.rerun() # Fuerza a la página a redibujarse con los nuevos datos
                     else:
-                        st.error("No se encontró solución factible en los rangos de la macro.")
+                        st.error("❌ No se encontró solución factible en los rangos (D1: 5-6, D2: 15-50).")
 
             st.markdown("---")
 
-            # --- ESPESORES Y VISUALIZACIÓN GRÁFICA ---
-            st.subheader("🏗️ Propuesta Estructural")
+            # --- ESPESORES Y VISUALIZACIÓN GRÁFICA (TU IMAGEN DE TIERRA DIVIDIDA) ---
+            st.subheader("🏗️ Propuesta Estructural Interactiva")
             col_esp, col_graf = st.columns([1, 1.5])
 
             with col_esp:
-                # Los valores iniciales vienen de la memoria (así se actualizan cuando usas la macro)
-                d1 = st.number_input("D1 (Carpeta Asfáltica) cm", value=st.session_state.d1_val, step=0.5, key="inp_d1")
-                d2 = st.number_input("D2 (Base Granular) cm", value=st.session_state.d2_val, step=0.5, key="inp_d2")
-                d3 = st.number_input("D3 (Subbase Granular) cm", value=st.session_state.d3_val, step=0.5, key="inp_d3")
+                # Extraemos de la sesión para que la Macro los pueda actualizar
+                d1 = st.number_input("D1 (Carpeta) cm", value=st.session_state.d1_val, step=0.5, key="inp_d1")
+                d2 = st.number_input("D2 (Base) cm", value=st.session_state.d2_val, step=0.5, key="inp_d2")
+                d3 = st.number_input("D3 (Subbase) cm", value=st.session_state.d3_val, step=0.5, key="inp_d3")
                 
-                # Actualizamos la memoria si el usuario escribe a mano
+                # Actualizamos la memoria
                 st.session_state.d1_val = d1
                 st.session_state.d2_val = d2
                 st.session_state.d3_val = d3
 
-                ee_soportado = calcular_ee_soportado(d1, d2, d3, a1, a2, a3, m2, m3, zr_val, so_val, dpsi_val, mr_val)
+                ee_soportado = calcular_ee_soportado(d1, d2, d3, a1, a2, a3, m2, m3, zr_val, so_val, dpsi_val, mr_val_mpa)
                 holgura = ee_soportado - eeq_val if ee_soportado > eeq_val else 0
 
                 st.markdown("<br>", unsafe_allow_html=True)
                 if ee_soportado >= eeq_val:
-                    st.markdown(f"<div class='verdict-ok'>✅ DISEÑO APROBADO<br>Soporta: {ee_soportado:,.0f} EEq</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div class='verdict-ok'>✅ APROBADO<br><span style='font-size:14px; font-weight:normal;'>Soporta: {ee_soportado:,.0f} EEq<br>Holgura: +{holgura:,.0f} EEq</span></div>", unsafe_allow_html=True)
                 else:
-                    st.markdown(f"<div class='verdict-bad'>⚠️ INSUFICIENTE<br>Soporta solo: {ee_soportado:,.0f} EEq</div>", unsafe_allow_html=True)
+                    deficit = eeq_val - ee_soportado
+                    st.markdown(f"<div class='verdict-bad'>⚠️ INSUFICIENTE<br><span style='font-size:14px; font-weight:normal;'>Soporta solo: {ee_soportado:,.0f} EEq<br>Faltan: {deficit:,.0f} EEq</span></div>", unsafe_allow_html=True)
 
             with col_graf:
-                # Código HTML/CSS para dibujar las capas del pavimento
-                h_d1 = max(40, d1 * 4) # Escala visual
-                h_d2 = max(50, d2 * 3)
-                h_d3 = max(60, d3 * 2.5)
+                # ESTA ES LA VISUALIZACIÓN DINÁMICA DE LA ESTRATIGRAFÍA
+                # El "height" se escala según el valor ingresado para que sea visual.
+                h_d1 = max(40, d1 * 4.5) 
+                h_d2 = max(50, d2 * 3.5)
+                h_d3 = max(50, d3 * 3.0)
                 
                 html_capas = f"""
-                <div style="width: 100%; max-width: 400px; margin: auto; border: 2px solid #222; border-radius: 5px; overflow: hidden; text-align: center; font-family: sans-serif; box-shadow: 0 4px 8px rgba(0,0,0,0.2);">
-                    <div style="background-color: #3b3b3b; color: white; height: {h_d1}px; display: flex; align-items: center; justify-content: center; font-weight: bold;">
+                <div style="width: 100%; max-width: 400px; margin: auto; border: 3px solid #2c3e50; border-radius: 6px; overflow: hidden; text-align: center; font-family: 'Segoe UI', sans-serif; box-shadow: 0 6px 12px rgba(0,0,0,0.15);">
+                    <div style="background: linear-gradient(180deg, #595959 0%, #3b3b3b 100%); color: white; height: {h_d1}px; display: flex; align-items: center; justify-content: center; font-weight: bold; letter-spacing: 0.5px;">
                         Carpeta Asfáltica ({d1} cm)
                     </div>
-                    <div style="background-color: #d4b872; color: #333; height: {h_d2}px; display: flex; align-items: center; justify-content: center; font-weight: bold; border-top: 1px solid #555;">
+                    <div style="background: linear-gradient(180deg, #e3c988 0%, #d4b872 100%); color: #333; height: {h_d2}px; display: flex; align-items: center; justify-content: center; font-weight: bold; border-top: 2px solid #2c3e50;">
                         Base Granular ({d2} cm)
                     </div>
-                    <div style="background-color: #a67c52; color: white; height: {h_d3}px; display: flex; align-items: center; justify-content: center; font-weight: bold; border-top: 1px solid #555;">
+                    <div style="background: linear-gradient(180deg, #b8865b 0%, #a67c52 100%); color: white; height: {h_d3}px; display: flex; align-items: center; justify-content: center; font-weight: bold; border-top: 2px solid #2c3e50;">
                         Subbase Granular ({d3} cm)
                     </div>
-                    <div style="background-color: #5c4033; color: white; height: 80px; display: flex; align-items: center; justify-content: center; font-weight: bold; border-top: 3px dashed #111;">
+                    <div style="background: linear-gradient(180deg, #6e4e37 0%, #4a3322 100%); color: #e0e0e0; height: 90px; display: flex; align-items: center; justify-content: center; font-weight: bold; border-top: 4px dashed #1a110b;">
                         Suelo Subrasante (CBR {cbr_subrasante}%)
                     </div>
                 </div>
                 """
                 st.markdown(html_capas, unsafe_allow_html=True)
+                st.caption("Gráfico Estratigráfico (Se ajusta en tiempo real según espesores)")
