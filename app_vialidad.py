@@ -161,7 +161,7 @@ else:
 
             col_izq, col_der = st.columns([1, 1])
 
-            # DATOS DE ENTRADA GENERALES
+            # DATOS DE ENTRADA
             with col_izq:
                 eeq_val = info_inv['EEq 2045']
                 st.metric("Tráfico Proyectado (EES)", f"{eeq_val:,.0f} EEq")
@@ -182,18 +182,34 @@ else:
                 col_pi, col_pf = st.columns(2)
                 with col_pi: pi_val = st.number_input("Serv. Inicial (pi)", value=4.2, step=0.1)
                 with col_pf: pf_val = st.number_input("Serv. Final (pf)", value=2.0, step=0.1)
-                
-                # Desplegable para ver la imagen So.jpg en grande y legible
-                with st.expander("📚 Ver Tabla de Referencia de Confiabilidad (So)"):
-                    try:
-                        st.image("So.jpg", use_container_width=True)
-                    except:
-                        st.caption("*(Imagen So.jpg no encontrada en el directorio)*")
+
+            st.markdown("<br>", unsafe_allow_html=True)
+            
+            # --- IMAGEN 1: So.jpg (Fija, centrada y grande) ---
+            c_so1, c_so2, c_so3 = st.columns([1, 4, 1])
+            with c_so2:
+                st.markdown("<div style='text-align:center; color:#555; font-size:14px; margin-bottom:5px;'><b>Tabla de Referencia:</b> Valores de Confiabilidad y Desviación Estándar Normal (Zr)</div>", unsafe_allow_html=True)
+                try:
+                    st.image("So.jpg", use_container_width=True)
+                except:
+                    st.caption("*(Imagen So.jpg no encontrada en el directorio)*")
 
             st.markdown("---")
 
             # MATERIALES Y MACRO
             st.subheader("⚙️ Materiales y Cálculo Automático")
+            
+            # --- IMAGEN 2: drenaje.jpg (Fija, centrada y grande) ---
+            c_dr1, c_dr2, c_dr3 = st.columns([1, 4, 1])
+            with c_dr2:
+                st.markdown("<div style='text-align:center; color:#555; font-size:14px; margin-bottom:5px;'><b>Tabla de Referencia:</b> Valores para Coeficientes de Drenaje (m)</div>", unsafe_allow_html=True)
+                try:
+                    st.image("drenaje.jpg", use_container_width=True)
+                except:
+                    st.caption("*(Imagen drenaje.jpg no encontrada en el directorio)*")
+            
+            st.markdown("<br>", unsafe_allow_html=True)
+            
             col_mat1, col_mat2, col_opt = st.columns([1, 1, 1.2])
             
             with col_mat1:
@@ -220,16 +236,6 @@ else:
                         st.rerun()
                     else:
                         st.error("❌ No se encontró solución factible en los rangos.")
-
-            # Desplegable para ver la imagen drenaje.jpg debajo del bloque de materiales
-            with st.expander("🌧️ Ver Tabla de Referencia de Coeficientes de Drenaje"):
-                try:
-                    # Usamos columnas internas en el expander para que no se deforme en pantallas muy anchas
-                    c_img_izq, c_img_cen, c_img_der = st.columns([1, 4, 1])
-                    with c_img_cen:
-                        st.image("drenaje.jpg", use_container_width=True)
-                except:
-                    st.caption("*(Imagen drenaje.jpg no encontrada en el directorio)*")
 
             st.markdown("---")
 
