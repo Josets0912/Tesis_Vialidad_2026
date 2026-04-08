@@ -62,9 +62,9 @@ def calcular_ee_soportado(d1, d2, d3, a1, a2, a3, m2, m3, zr_val, so_val, pi_val
     try:
         f6_beta = 0.4 + (97.81 / (ne_mm + 25.4)) ** 5.19
         
-        # === AQUÍ ESTÁ TU FÓRMULA EXACTA DEL EXCEL ===
-        # POTENCIA(Ne + 25.4, 9.36) * POTENCIA(10, -16.4+Zr*So) * Potencia(Mr, 2.32) * Potencia(((Pi - Pf)/(Pi - 1.5)), 1/beta)
-        ee = ((ne_mm + 25.4) ** 9.36) * (10 ** (-16.4 + (zr_val * so_val))) * (mr_val_mpa ** 2.32) * (((pi_val - pf_val) / (pi_val - 1.5)) ** (1 / f6_beta))
+      
+      
+        ee = ((ne_mm + 25.4) ** 9.36) * (10 ** (-16.4 + (-0.253* so_val))) * (mr_val_mpa ** 2.32) * (((pi_val - pf_val) / (pi_val - 1.5)) ** (1 / f6_beta))
         return ee
     except: 
         return 0
@@ -147,7 +147,7 @@ else:
             ax.axhline(5000, color='gray', linestyle=':', alpha=0.5)
             st.pyplot(fig)
 
-    # --- PESTAÑA DISEÑO ESTRUCTURAL (CON FÓRMULA CORREGIDA) ---
+    # --- PESTAÑA DISEÑO ESTRUCTURAL ---
     with tab_diseno:
         if not es_granular:
             st.warning(f"⚠️ Este camino ya cuenta con una superficie de **{carpeta}**. El diseño estructural inicial está deshabilitado.")
@@ -190,15 +190,15 @@ else:
             col_mat1, col_mat2, col_opt = st.columns([1, 1, 1.2])
             
             with col_mat1:
-                a1 = st.number_input("Coef. Asfalto a1 (1/mm)", value=0.197, format="%.3f")
-                a2 = st.number_input("Coef. Base a2 (1/mm)", value=0.090, format="%.3f")
-                a3 = st.number_input("Coef. Subbase a3 (1/mm)", value=0.090, format="%.3f")
+                a1 = st.number_input("Coef. Asfalto (1/mm)", value=0.197, format="%.3f")
+                a2 = st.number_input("Coef. Base (1/mm)", value=0.090, format="%.3f")
+                a3 = st.number_input("Coef. Subbase (1/mm)", value=0.090, format="%.3f")
             
             with col_mat2:
                 precip = info_inv['Precipitacion promedio Mensual (mm)']
                 m_sugerido = 0.8 if precip > 80 else (1.0 if precip > 40 else 1.1)
-                m2 = st.number_input(f"Coef. Drenaje Base m2", value=m_sugerido, format="%.2f")
-                m3 = st.number_input(f"Coef. Drenaje Subbase m3", value=m_sugerido, format="%.2f")
+                m2 = st.number_input(f"Coef. Drenaje Base", value=m_sugerido, format="%.2f")
+                m3 = st.number_input(f"Coef. Drenaje Subbase", value=m_sugerido, format="%.2f")
 
             with col_opt:
                 st.markdown("<br>", unsafe_allow_html=True)
