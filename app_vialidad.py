@@ -14,9 +14,9 @@ st.set_page_config(page_title="Gestión Vial - Tesis", layout="wide", initial_si
 
 if "informe_generado" not in st.session_state:
     st.session_state.informe_generado = False
-if "inp_d1" not in st.session_state: st.session_state.inp_d1 = 5.0
-if "inp_d2" not in st.session_state: st.session_state.inp_d2 = 15.0
-if "inp_d3" not in st.session_state: st.session_state.inp_d3 = 15.0
+if "inp_d1" not in st.session_state: st.session_state.inp_d1 = 2.5
+if "inp_d2" not in st.session_state: st.session_state.inp_d2 = 10.0
+if "inp_d3" not in st.session_state: st.session_state.inp_d3 = 10.0
 
 # --- FUNCIONES MATEMÁTICAS ---
 @st.cache_data
@@ -73,18 +73,16 @@ def calcular_ee_soportado(d1, d2, d3, a1, a2, a3, m2, m3, zr_val, so_val, pi_val
         return ee
     except: return 0
 
-def optimizar_espesores_vba(ee_req, a1, a2, a3, m2, m3, zr_val, so_val, pi_val, pf_val, mr_val_mpa, is_cape_seal):
-    for sumaTotal in range(35, 161):
-        # Si es Cape Seal, el asfalto es 0. Si no, itera entre 5 y 6 (o el mínimo que uses)
-        rango_asfalto = range(0, 1) if is_cape_seal else range(5, 7)
-        
-        for hAsf in rango_asfalto:
-            for hBase in range(10, 51): # Mínimo 10 cm Base
-                hSub = sumaTotal - hAsf - hBase
-                if 15 <= hSub <= 80: # Mínimo 15 cm Subbase
-                    ee_dis = calcular_ee_soportado(hAsf, hBase, hSub, a1, a2, a3, m2, m3, zr_val, so_val, pi_val, pf_val, mr_val_mpa)
-                    if ee_dis >= ee_req: 
-                        return float(hAsf), float(hBase), float(hSub), ee_dis
+def optimizar_espesores_vba(ee_req, a1, a2, a3, m2, m3, zr_val, so_val, pi_val, pf_val, mr_val_mpa):
+    hAsf = 2.5 # CARPETA FIJADA EN 2.5 cm PARA CAMINOS BÁSICOS
+    
+    # Iteramos desde 20 cm (10 Base + 10 Subbase)
+    for sumaGranular in range(20, 131):
+        for hBase in range(10, 51): # Mínimo constructivo AASHTO = 10 cm
+            hSub = sumaGranular - hBase
+            if 10 <= hSub <= 80: # Mínimo constructivo AASHTO = 10 cm
+                ee_dis = calcular_ee_soportado(hAsf, hBase, hSub, a1, a2, a3, m2, m3, zr_val, so_val, pi_val, pf_val, mr_val_mpa)
+                if ee_dis >= ee_req: return float(hAsf), float(hBase), float(hSub), ee_dis
     return None, None, None, None
 
 # --- CARGA Y SIDEBAR ---
@@ -102,8 +100,7 @@ df_rol['ETIQUETA'] = df_rol['NOMBRE DEL CAMINO'] + " (" + df_rol['ESTACIÓN'] + 
 tramo_sel = st.sidebar.selectbox("Seleccione Sector:", df_rol['ETIQUETA'].tolist())
 
 st.sidebar.markdown("---")
-if st.sidebar.button("Generar Informe Técnico 🚀"): 
-    st.session_state.informe_generado = True
+if st.sidebar.button("Generar Informe Técnico 🚀"): st.session_state.informe_generado = True
 
 st.markdown("<style>.info-card{background-color:#f8f9fa; padding:15px; border-radius:8px; border:1px solid #dee2e6; text-align:left;} .verdict-ok{background-color:#d4edda; color:#155724; padding:15px; border-radius:5px; font-weight:bold; border-left:8px solid #28a745; font-size:16px; text-align:center;} .verdict-bad{background-color:#f8d7da; color:#721c24; padding:15px; border-radius:5px; font-weight:bold; border-left:8px solid #dc3545; font-size:16px; text-align:center;} .sn-box{background-color:#e2e3e5; padding:10px; border-radius:5px; text-align:center; border:1px solid #ced4da; margin-top:10px;}</style>", unsafe_allow_html=True)
 
@@ -164,35 +161,22 @@ else:
             st.header("📏 MÉTODO AASHTO 93 - DISEÑO ESTRUCTURAL")
             st.markdown("---")
 
-            col_izq, col_der = st.columns([1, 1])
-
-            # DATOS DE ENTRADA GENERALES
-            with col_izq:
+            # --- BLOQUE 1: DATOS DE ENTRADA ---
+            st.subheader("📝 Datos de Entrada Generales")
+            col_in1, col_in2 = st.columns(2)
+            with col_in1:
                 eeq_val = info_inv['EEq 2045']
                 st.metric("Tráfico Proyectado (EES)", f"{eeq_val:,.0f} EEq")
-                
+            with col_in2:
                 cbr_subrasante = st.number_input("C.B.R. de la Subrasante (%)", min_value=1.0, max_value=100.0, value=25.0, step=0.1)
                 if cbr_subrasante < 12: mr_calc_mpa = 17.6 * (cbr_subrasante ** 0.64)
                 else: mr_calc_mpa = 22.1 * (cbr_subrasante ** 0.55)
-                mr_val_mpa = st.number_input("Módulo Resiliente (MR) en MPa", value=float(round(mr_calc_mpa, 2)))
-
-            with col_der:
-                st.markdown("**Parámetros de Diseño (Factores AASHTO)**")
-                confiabilidad_pct = st.number_input("Confiabilidad (R) %", min_value=50.0, value=95.0, step=1.0)
-                dict_zr = {50: 0.0, 75: -0.674, 80: -0.841, 85: -1.036, 90: -1.282, 95: -1.645, 99: -2.327}
-                zr_val = dict_zr[min(dict_zr.keys(), key=lambda k: abs(k - confiabilidad_pct))]
-                
-                cv_cbr = st.number_input("Coef. Variación CBR (CV %)", value=50.0, step=5.0)
-                so_val = calcular_so_polinomico(eeq_val, cv_cbr)
-                st.info(f"Desviación Estándar ($S_o$) calculada: **{so_val:.4f}**")
-                
-                col_pi, col_pf = st.columns(2)
-                with col_pi:
-                    pi_val = st.number_input("Serv. Inicial (pi)", value=4.2, step=0.1)
-                with col_pf:
-                    pf_val = st.number_input("Serv. Final (pf)", value=2.0, step=0.1)
+                mr_val_mpa = st.number_input("Módulo Resiliente (MR) auto-calculado en MPa", value=float(round(mr_calc_mpa, 2)))
 
             st.markdown("---")
+
+            # --- BLOQUE 2: PARÁMETROS DE DISEÑO + IMAGEN 1 ---
+            st.subheader("📊 Parámetros de Diseño (Factores AASHTO)")
             
             c_so1, c_so2, c_so3 = st.columns([1, 4, 1])
             with c_so2:
@@ -201,10 +185,23 @@ else:
                     st.image("So.jpg", use_container_width=True)
                 except:
                     st.caption("*(Imagen So.jpg no encontrada en el directorio)*")
+            st.markdown("<br>", unsafe_allow_html=True)
+
+            col_p1, col_p2, col_p3 = st.columns(3)
+            with col_p1:
+                zr_val = st.number_input("Confiabilidad (Zr)", value=-0.253, step=0.010, format="%.3f")
+            with col_p2:
+                cv_cbr = st.number_input("Coef. Variación CBR (CV %)", value=50.0, step=5.0)
+                so_val = calcular_so_polinomico(eeq_val, cv_cbr)
+                st.info(f"Desviación ($S_o$): **{so_val:.4f}**")
+            with col_p3:
+                col_pi, col_pf = st.columns(2)
+                with col_pi: pi_val = st.number_input("Serv. Inicial (pi)", value=4.2, step=0.1)
+                with col_pf: pf_val = st.number_input("Serv. Final (pf)", value=2.0, step=0.1)
 
             st.markdown("---")
 
-            # MATERIALES Y MACRO
+            # --- BLOQUE 3: MATERIALES + IMAGEN 2 ---
             st.subheader("⚙️ Materiales y Cálculo Automático")
             
             c_dr1, c_dr2, c_dr3 = st.columns([1, 4, 1])
@@ -214,16 +211,11 @@ else:
                     st.image("drenaje.jpg", use_container_width=True)
                 except:
                     st.caption("*(Imagen drenaje.jpg no encontrada en el directorio)*")
-            
             st.markdown("<br>", unsafe_allow_html=True)
-            
+
             col_mat1, col_mat2, col_opt = st.columns([1, 1, 1.2])
-            
             with col_mat1:
-                cape_seal_mode = st.checkbox("🛣️ Camino Básico (Cape Seal / TSD)")
-                val_a1 = 0.000 if cape_seal_mode else 0.197
-                
-                a1 = st.number_input("Coef. Asfalto (1/mm)", value=val_a1, disabled=True, format="%.3f")
+                a1 = st.number_input("Coef. Asfalto (1/mm)", value=0.197, format="%.3f")
                 a2 = st.number_input("Coef. Base (1/mm)", value=0.090, format="%.3f")
                 a3 = st.number_input("Coef. Subbase (1/mm)", value=0.090, format="%.3f")
             
@@ -238,7 +230,7 @@ else:
                 st.info("💡 Ejecuta la macro para buscar la combinación óptima de espesores.")
                 if st.button("🔄 Ejecutar Optimización (Macro)"):
                     opt_d1, opt_d2, opt_d3, opt_ee = optimizar_espesores_vba(
-                        eeq_val, a1, a2, a3, m2, m3, zr_val, so_val, pi_val, pf_val, mr_val_mpa, is_cape_seal=cape_seal_mode
+                        eeq_val, a1, a2, a3, m2, m3, zr_val, so_val, pi_val, pf_val, mr_val_mpa
                     )
                     if opt_d1 is not None:
                         st.session_state.inp_d1 = float(opt_d1)
@@ -251,22 +243,18 @@ else:
 
             st.markdown("---")
 
-            # ESPESORES Y VISUALIZACIÓN
+            # --- BLOQUE 4: ESPESORES Y VISUALIZACIÓN ---
             st.subheader("🏗️ Propuesta Estructural Interactiva")
             col_esp, col_graf = st.columns([1, 1.5])
 
             with col_esp:
-                # Si está activado el Cape Seal, forzamos visualmente a que la carpeta quede en 0
-                if cape_seal_mode:
-                    st.session_state.inp_d1 = 0.0
-
-                d1 = st.number_input("Carpeta Asfáltica (cm)", min_value=0.0, step=0.5, key="inp_d1", disabled=cape_seal_mode)
+                # Agregado min_value=10.0 a las capas granulares, y min_value=2.5 a la carpeta
+                d1 = st.number_input("Carpeta Asfáltica (cm)", min_value=2.5, step=0.5, key="inp_d1")
                 d2 = st.number_input("Base Granular (cm)", min_value=10.0, step=0.5, key="inp_d2")
-                d3 = st.number_input("Subbase Granular (cm)", min_value=15.0, step=0.5, key="inp_d3")
+                d3 = st.number_input("Subbase Granular (cm)", min_value=10.0, step=0.5, key="inp_d3")
 
                 ne_aportado = (d1 * 10 * 1 * a1) + (d2 * 10 * m2 * a2) + (d3 * 10 * m3 * a3)
-                
-                st.markdown(f"<div class='sn-box'><h4>NE Aportado (Celda F5): <b>{ne_aportado:.2f} mm</b></h4></div>", unsafe_allow_html=True)
+                st.markdown(f"<div class='sn-box'><h4>NE Aportado: <b>{ne_aportado:.2f} mm</b></h4></div>", unsafe_allow_html=True)
 
                 ee_soportado = calcular_ee_soportado(d1, d2, d3, a1, a2, a3, m2, m3, zr_val, so_val, pi_val, pf_val, mr_val_mpa)
                 holgura = ee_soportado - eeq_val if ee_soportado > eeq_val else 0
@@ -279,21 +267,7 @@ else:
                     st.markdown(f"<div class='verdict-bad'>⚠️ INSUFICIENTE<br><span style='font-size:14px; font-weight:normal;'>Soporta solo: {ee_soportado:,.0f} EEq<br>Faltan: {deficit:,.0f} EEq</span></div>", unsafe_allow_html=True)
 
             with col_graf:
-                # DIBUJO DINÁMICO
-                if cape_seal_mode:
-                    html_asfalto = """
-                    <div style="background: linear-gradient(180deg, #333 0%, #111 100%); color: #fff; height: 30px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 13px; border-bottom: 2px solid #000;">
-                        Cape Seal / TSD (Protección)
-                    </div>
-                    """
-                else:
-                    h_d1 = max(40, d1 * 4.5) 
-                    html_asfalto = f"""
-                    <div style="background: linear-gradient(180deg, #595959 0%, #3b3b3b 100%); color: white; height: {h_d1}px; display: flex; align-items: center; justify-content: center; font-weight: bold;">
-                        Carpeta Asfáltica ({d1} cm)
-                    </div>
-                    """
-
+                h_d1 = max(40, d1 * 4.5) 
                 h_d2 = max(50, d2 * 3.5)
                 h_d3 = max(50, d3 * 3.0)
                 
@@ -302,7 +276,9 @@ else:
                 
                 html_capas = f"""
                 <div style="width: 100%; max-width: 400px; margin: auto; border: 3px solid #2c3e50; border-radius: 6px; overflow: hidden; text-align: center; font-family: 'Segoe UI', sans-serif; box-shadow: 0 6px 12px rgba(0,0,0,0.15);">
-                    {html_asfalto}
+                    <div style="background: linear-gradient(180deg, #595959 0%, #3b3b3b 100%); color: white; height: {h_d1}px; display: flex; align-items: center; justify-content: center; font-weight: bold;">
+                        Carpeta Asfáltica ({d1} cm)
+                    </div>
                     <div style="background: linear-gradient(180deg, #e3c988 0%, #d4b872 100%); color: #333; height: {h_d2}px; display: flex; align-items: center; justify-content: center; font-weight: bold; border-top: 2px solid #2c3e50;">
                         Base Granular ({d2} cm)
                     </div>
