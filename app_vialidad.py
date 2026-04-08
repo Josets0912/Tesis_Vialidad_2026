@@ -77,10 +77,10 @@ def optimizar_espesores_vba(ee_req, a1, a2, a3, m2, m3, zr_val, so_val, pi_val, 
     hAsf = 2.5 # CARPETA FIJADA EN 2.5 cm PARA CAMINOS BÁSICOS
     
     # Iteramos desde 20 cm (10 Base + 10 Subbase)
-    for sumaGranular in range(20, 131):
+    for sumaGranular in range(25, 131):
         for hBase in range(10, 51): # Mínimo constructivo AASHTO = 10 cm
             hSub = sumaGranular - hBase
-            if 10 <= hSub <= 80: # Mínimo constructivo AASHTO = 10 cm
+            if 15 <= hSub <= 80: # Mínimo constructivo AASHTO = 10 cm
                 ee_dis = calcular_ee_soportado(hAsf, hBase, hSub, a1, a2, a3, m2, m3, zr_val, so_val, pi_val, pf_val, mr_val_mpa)
                 if ee_dis >= ee_req: return float(hAsf), float(hBase), float(hSub), ee_dis
     return None, None, None, None
