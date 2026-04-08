@@ -14,10 +14,11 @@ st.set_page_config(page_title="Gestión Vial - Tesis", layout="wide", initial_si
 
 if "informe_generado" not in st.session_state:
     st.session_state.informe_generado = False
-# Se fija el valor inicial de la carpeta en 2.5 cm para Caminos Básicos
-if "d1_val" not in st.session_state: st.session_state.d1_val = 2.5
-if "d2_val" not in st.session_state: st.session_state.d2_val = 15.0
-if "d3_val" not in st.session_state: st.session_state.d3_val = 15.0
+
+# Usamos directamente las "llaves" (keys) de las casillas para que se actualicen visualmente
+if "inp_d1" not in st.session_state: st.session_state.inp_d1 = 2.5
+if "inp_d2" not in st.session_state: st.session_state.inp_d2 = 15.0
+if "inp_d3" not in st.session_state: st.session_state.inp_d3 = 15.0
 
 # --- FUNCIONES MATEMÁTICAS ---
 @st.cache_data
@@ -77,14 +78,12 @@ def calcular_ee_soportado(d1, d2, d3, a1, a2, a3, m2, m3, zr_val, so_val, pi_val
 def optimizar_espesores_vba(ee_req, a1, a2, a3, m2, m3, zr_val, so_val, pi_val, pf_val, mr_val_mpa):
     hAsf = 2.5 # CARPETA FIJADA EN 2.5 cm PARA CAMINOS BÁSICOS
     
-    # Se itera solo la suma del material granular (Base + Subbase) desde 30 cm hasta 130 cm
     for sumaGranular in range(30, 131):
         for hBase in range(15, 51):
             hSub = sumaGranular - hBase
             if 15 <= hSub <= 80:
                 ee_dis = calcular_ee_soportado(hAsf, hBase, hSub, a1, a2, a3, m2, m3, zr_val, so_val, pi_val, pf_val, mr_val_mpa)
-                if ee_dis >= ee_req: 
-                    return float(hAsf), float(hBase), float(hSub), ee_dis
+                if ee_dis >= ee_req: return float(hAsf), float(hBase), float(hSub), ee_dis
     return None, None, None, None
 
 # --- CARGA Y SIDEBAR ---
@@ -235,7 +234,10 @@ else:
                         eeq_val, a1, a2, a3, m2, m3, zr_val, so_val, pi_val, pf_val, mr_val_mpa
                     )
                     if opt_d1 is not None:
-                        st.session_state.d1_val, st.session_state.d2_val, st.session_state.d3_val = opt_d1, opt_d2, opt_d3
+                        # AQUÍ ESTÁ LA MAGIA: Actualizamos directamente la memoria de las casillas
+                        st.session_state.inp_d1 = float(opt_d1)
+                        st.session_state.inp_d2 = float(opt_d2)
+                        st.session_state.inp_d3 = float(opt_d3)
                         st.success("✅ ¡Diseño óptimo encontrado!")
                         st.rerun()
                     else:
@@ -248,15 +250,13 @@ else:
             col_esp, col_graf = st.columns([1, 1.5])
 
             with col_esp:
-                # El input ahora viene fijado a 2.5 cm por defecto
-                d1 = st.number_input("Carpeta Asfáltica (cm)", value=float(st.session_state.d1_val), step=0.5, key="inp_d1")
-                d2 = st.number_input("Base Granular (cm)", value=float(st.session_state.d2_val), step=0.5, key="inp_d2")
-                d3 = st.number_input("Subbase Granular (cm)", value=float(st.session_state.d3_val), step=0.5, key="inp_d3")
+                # Las casillas ahora leen su propio estado (key) y se actualizarán de inmediato
+                d1 = st.number_input("Carpeta Asfáltica (cm)", step=0.5, key="inp_d1")
+                d2 = st.number_input("Base Granular (cm)", step=0.5, key="inp_d2")
+                d3 = st.number_input("Subbase Granular (cm)", step=0.5, key="inp_d3")
                 
-                st.session_state.d1_val, st.session_state.d2_val, st.session_state.d3_val = d1, d2, d3
-
                 ne_aportado = (d1 * 10 * 1 * a1) + (d2 * 10 * m2 * a2) + (d3 * 10 * m3 * a3)
-                st.markdown(f"<div class='sn-box'><h4>NE Aportado: <b>{ne_aportado:.2f} mm</b></h4></div>", unsafe_allow_html=True)
+                st.markdown(f"<div class='sn-box'><h4>NE Aportado (Celda F5): <b>{ne_aportado:.2f} mm</b></h4></div>", unsafe_allow_html=True)
 
                 ee_soportado = calcular_ee_soportado(d1, d2, d3, a1, a2, a3, m2, m3, zr_val, so_val, pi_val, pf_val, mr_val_mpa)
                 holgura = ee_soportado - eeq_val if ee_soportado > eeq_val else 0
