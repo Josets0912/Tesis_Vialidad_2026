@@ -19,7 +19,7 @@ st.set_page_config(
 
 if "informe_generado" not in st.session_state:
     st.session_state.informe_generado = False
-if "inp_d1" not in st.session_state: st.session_state.inp_d1 = 2.5
+if "inp_d1" not in st.session_state: st.session_state.inp_d1 = 5.0
 if "inp_d2" not in st.session_state: st.session_state.inp_d2 = 10.0
 if "inp_d3" not in st.session_state: st.session_state.inp_d3 = 15.0
 
@@ -67,7 +67,7 @@ def calcular_ee_soportado(d1, d2, d3, a1, a2, a3, m2, m3, zr_val, so_val, pi_val
     except: return 0
 
 def optimizar_espesores_vba(ee_req, a1, a2, a3, m2, m3, zr_val, so_val, pi_val, pf_val, mr_val_mpa, is_cape_seal):
-    hAsf = 0.0 if is_cape_seal else 2.5
+    hAsf = 0.0 if is_cape_seal else 5.0
     for sumaGranular in range(25, 131):
         for hBase in range(10, 51):
             hSub = sumaGranular - hBase
@@ -376,7 +376,7 @@ else:
 
 
     # ==========================================
-    # PESTAÑA 2: DISEÑO ESTRUCTURAL (AHORA HABILITADO PARA SEGUNDA CALZADA)
+    # PESTAÑA 2: DISEÑO ESTRUCTURAL (HABILITADO PARA SEGUNDA CALZADA)
     # ==========================================
     with tab_diseno:
         if info_inv is None:
@@ -467,9 +467,10 @@ else:
             col_esp, col_graf = st.columns([1, 1.5])
             with col_esp:
                 if is_cape_seal: st.session_state.inp_d1 = 0.0
-                elif st.session_state.inp_d1 == 0.0: st.session_state.inp_d1 = 2.5
+                elif st.session_state.inp_d1 < 5.0: st.session_state.inp_d1 = 5.0
 
-                d1 = st.number_input("Carpeta Asfáltica (cm)", min_value=0.0, step=0.5, key="inp_d1", disabled=is_cape_seal)
+                min_d1 = 0.0 if is_cape_seal else 5.0
+                d1 = st.number_input("Carpeta Asfáltica (cm)", min_value=min_d1, step=0.5, key="inp_d1", disabled=is_cape_seal)
                 d2 = st.number_input("Base Granular (cm)", min_value=10.0, step=0.5, key="inp_d2")
                 d3 = st.number_input("Subbase Granular (cm)", min_value=15.0, step=0.5, key="inp_d3")
 
