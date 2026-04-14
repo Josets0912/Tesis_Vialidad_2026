@@ -194,6 +194,7 @@ else:
     
     rodadura_maestra = str(carpeta).upper()
     es_granular = any(x in rodadura_maestra for x in ["RIPIO", "GRANULAR", "TIERRA", "SUELO", "NATURAL"])
+    es_pavimentado = not es_granular
     info_inv = df_inv[df_inv['Rol'] == rol_sel].iloc[0] if not df_inv[df_inv['Rol'] == rol_sel].empty else None
 
     # EXTRAER KM INICIAL Y FINAL
@@ -348,11 +349,9 @@ else:
         with col_diag:
             st.markdown("#### 📢 Estado del Proyecto")
             carpeta_up, calzada_up = carpeta.upper(), calzada_info.upper()
-            es_no_pavimentado = any(x in carpeta_up for x in ["TIERRA", "RIPIO", "GRAVA", "SUELO"])
-            es_pavimentado = not es_no_pavimentado
             es_doble_via = "DOBLE" in calzada_up or "DOBLE" in carpeta_up
 
-            if es_no_pavimentado:
+            if es_granular:
                 if tmda_24 > 300: st.error(f"🔴 **PRIORIDAD ALTA:** Camino granular con {int(tmda_24)} veh/día. Supera norma (300). **Se recomienda Pavimentación.**")
                 else: st.success(f"🟢 **CONSERVACIÓN:** Tránsito bajo ({int(tmda_24)} veh/día). Mantener perfilado.")
             elif es_pavimentado:
@@ -377,18 +376,31 @@ else:
 
 
     # ==========================================
-    # PESTAÑA 2: DISEÑO ESTRUCTURAL (INTOCABLE)
+    # PESTAÑA 2: DISEÑO ESTRUCTURAL (AHORA HABILITADO PARA SEGUNDA CALZADA)
     # ==========================================
     with tab_diseno:
-        if not es_granular:
-            st.warning(f"⚠️ Este camino ya cuenta con una superficie de **{carpeta}**. El diseño estructural inicial está deshabilitado.")
-        elif info_inv is None:
+        if info_inv is None:
             st.warning("⚠️ No existen datos de Ejes Equivalentes (EEq) para este Rol en el inventario.")
         else:
+            if es_pavimentado:
+                st.info("ℹ️ Este camino ya cuenta con pavimento. El cálculo a continuación corresponde al estudio de **Segunda Calzada**.")
+
+            st.header("📏 MÉTODO AASHTO 93 - DISEÑO ESTRUCTURAL")
+            st.markdown("---")
+            
             col_in1, col_in2 = st.columns(2)
             with col_in1:
-                eeq_val = info_inv['EEq 2045']
-                st.metric("Tráfico Proyectado (EES)", f"{eeq_val:,.0f} EEq")
+                eeq_base = info_inv['EEq 2045']
+                if es_pavimentado:
+                    st.markdown("**⚙️ Factores de Distribución (Doble Calzada)**")
+                    st.caption("Nota: Se asume que el EEq del inventario ya posee factor direccional (0.5).")
+                    fp = st.slider("Factor de Pista (fp)", min_value=0.50, max_value=1.00, value=0.80, step=0.05)
+                    eeq_val = eeq_base * fp
+                    st.metric("Tráfico de Diseño (EES)", f"{eeq_val:,.0f} EEq", f"Base: {eeq_base:,.0f} x {fp:.2f}")
+                else:
+                    eeq_val = eeq_base
+                    st.metric("Tráfico Proyectado (EES)", f"{eeq_val:,.0f} EEq")
+                    
             with col_in2:
                 cbr_subrasante = st.number_input("C.B.R. de la Subrasante (%)", min_value=1.0, max_value=100.0, value=25.0, step=0.1)
                 mr_calc_mpa = 17.6 * (cbr_subrasante ** 0.64) if cbr_subrasante < 12 else 22.1 * (cbr_subrasante ** 0.55)
@@ -426,7 +438,7 @@ else:
 
             col_mat1, col_mat2, col_opt = st.columns([1, 1, 1.2])
             with col_mat1:
-                is_cape_seal = st.checkbox("🛣️ Camino Básico (Cape Seal / TSD)")
+                is_cape_seal = st.checkbox("🛣️ Camino Básico (Cape Seal / TSD)", value=not es_pavimentado)
                 val_a1 = 0.000 if is_cape_seal else 0.197
                 a1 = st.number_input("Coef. Asfalto (1/mm)", value=val_a1, disabled=True, format="%.3f")
                 a2 = st.number_input("Coef. Base (1/mm)", value=0.090, format="%.3f")
@@ -494,7 +506,7 @@ else:
 
 
     # ==========================================
-    # PESTAÑA 3: PRESUPUESTO OBRA GRUESA (INTOCABLE)
+    # PESTAÑA 3: PRESUPUESTO OBRA GRUESA (INTOCABLE - POR AHORA)
     # ==========================================
     with tab_presupuesto:
         if not es_granular:
