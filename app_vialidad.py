@@ -48,7 +48,7 @@ def cargar_datos():
         st.error(f"❌ Error Crítico: No encuentro un archivo. Verifica que {e.filename} esté en la carpeta.")
         st.stop()
 
-# --- NUEVO: MOTOR DE ANÁLISIS REGIONAL (CUADRO DE MANDO) ---
+# --- MOTOR DE ANÁLISIS REGIONAL (CUADRO DE MANDO) ---
 @st.cache_data
 def analizar_red_vial_completa(df_m, df_i):
     resultados = []
@@ -219,7 +219,7 @@ if st.sidebar.button("🏠 Volver a Visión Regional"):
 
 # --- 5. INTERFAZ PRINCIPAL ---
 if not st.session_state.informe_generado:
-    # --- PORTADA Y DASHBOARD REGIONAL (NUEVO) ---
+    # --- PORTADA Y DASHBOARD REGIONAL (MODIFICADO AQUÍ SEGÚN SOLICITUD) ---
     st.markdown("<br><br>", unsafe_allow_html=True)
     st.markdown("""
         <h1 style='text-align: center; color: #0E1117; font-size: 55px;'>
@@ -253,9 +253,16 @@ if not st.session_state.informe_generado:
         ax.set_title(f"Inversiones Requeridas por Saturación: {titulo}")
         ax.set_ylabel("Cantidad de Proyectos")
         ax.set_xlabel("Año Crítico")
-        ax.xaxis.set_major_locator(MaxNLocator(integer=True))
         
-        # Asegurarnos de que las leyendas siempre estén correctas aunque falte una categoría
+        # --- MODIFICACIONES SOLICITADAS: Eje X de 1 en 1, Eje Y con Holgura de 5 ---
+        ax.set_xticks(range(len(anios_full)))
+        ax.set_xticklabels(anios_full, rotation=45, ha='right')
+        
+        max_proyectos = pivote.values.max() if not pivote.empty else 0
+        ax.set_ylim(0, max_proyectos + 5)
+        ax.yaxis.set_major_locator(MaxNLocator(integer=True))
+        # -------------------------------------------------------------------------
+        
         handles, labels = ax.get_legend_handles_labels()
         ax.legend(handles, labels, loc='upper left')
         
@@ -283,7 +290,7 @@ if not st.session_state.informe_generado:
     st.info("👈 Seleccione un camino en el menú lateral para iniciar el análisis estructural detallado.")
 
 else:
-    # EXTRACCIÓN DE DATOS DEL TRAMO
+    # EXTRACCIÓN DE DATOS DEL TRAMO (CANDADO 🔒)
     fila = df_rol[df_rol['ETIQUETA'] == tramo_sel].iloc[0]
     nombre = fila['NOMBRE DEL CAMINO']
     sector_especifico = fila['Sector'] if 'Sector' in fila else "Sector No Especificado"
@@ -333,7 +340,7 @@ else:
     tab_demanda, tab_diseno, tab_presupuesto = st.tabs(["📈 Análisis de Demanda y Proyección", "🛣️ Diseño Estructural (AASHTO 93)", "💰 Presupuesto Obra Gruesa"])
 
     # ==========================================
-    # PESTAÑA 1: ANÁLISIS DE DEMANDA (INTOCABLE)
+    # PESTAÑA 1: ANÁLISIS DE DEMANDA (CANDADO 🔒)
     # ==========================================
     with tab_demanda:
         anios_censo = [2015, 2017, 2018, 2020, 2022, 2024]
@@ -476,7 +483,7 @@ else:
 
 
     # ==========================================
-    # PESTAÑA 2: DISEÑO ESTRUCTURAL (INTOCABLE)
+    # PESTAÑA 2: DISEÑO ESTRUCTURAL (CANDADO 🔒)
     # ==========================================
     with tab_diseno:
         if info_inv is None:
@@ -607,7 +614,7 @@ else:
 
 
     # ==========================================
-    # PESTAÑA 3: PRESUPUESTO OBRA GRUESA (INTOCABLE)
+    # PESTAÑA 3: PRESUPUESTO OBRA GRUESA (CANDADO 🔒)
     # ==========================================
     with tab_presupuesto:
         if not es_granular:
