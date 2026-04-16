@@ -48,6 +48,63 @@ def cargar_datos():
         st.error(f"❌ Error Crítico: No encuentro un archivo. Verifica que {e.filename} esté en la carpeta.")
         st.stop()
 
+# --- NUEVO: MOTOR DE ANÁLISIS REGIONAL (CUADRO DE MANDO) ---
+@st.cache_data
+def analizar_red_vial_completa(df_m, df_i):
+    resultados = []
+    anios_censo = [2015, 2017, 2018, 2020, 2022, 2024]
+    roles_unicos = df_m['ROL NUEVO'].dropna().unique()
+    
+    for rol in roles_unicos:
+        estaciones_rol = df_m[df_m['ROL NUEVO'] == rol]
+        if estaciones_rol.empty: continue
+        
+        anio_critico = 9999
+        tipo_inv = ""
+        
+        info_inv = df_i[df_i['Rol'] == rol]
+        provincia = info_inv.iloc[0]['Provincia'] if (not info_inv.empty and 'Provincia' in info_inv.columns) else "Sin Info"
+        
+        carpeta_actual = str(estaciones_rol.iloc[0]['TIPO DE CARPETA']).upper()
+        es_granular = any(x in carpeta_actual for x in ["RIPIO", "GRANULAR", "TIERRA", "SUELO", "NATURAL"])
+        umbral = 300 if es_granular else 5000
+        
+        for _, fila in estaciones_rol.iterrows():
+            try:
+                vals = fila[[f'TMDA {a}' for a in anios_censo]].values.flatten().astype(float)
+                serie = pd.Series(vals, index=anios_censo).sort_index()
+                
+                try: modelo = ExponentialSmoothing(serie, trend='mul', damped_trend=True).fit(damping_trend=0.92)
+                except: modelo = ExponentialSmoothing(serie, trend='add', damped_trend=True).fit(damping_trend=0.92)
+                    
+                anios_fut = np.arange(2025, 2046)
+                pred_raw = pd.Series(modelo.forecast(len(anios_fut)).values, index=anios_fut)
+                
+                tasa_crecimiento_inicial = pred_raw.iloc[1] / pred_raw.iloc[0] if pred_raw.iloc[0] > 0 and pred_raw.iloc[1] > 0 else 1.0
+                base_teorica_modelo = pred_raw.iloc[0] / tasa_crecimiento_inicial
+                ultimo_real = serie.iloc[-1]
+                factor_ajuste = ultimo_real / base_teorica_modelo if base_teorica_modelo > 0 else 1.0
+                pred_escalada = pred_raw * factor_ajuste
+                
+                piso = ultimo_real 
+                for y in anios_fut:
+                    val = pred_escalada[y]
+                    if val < piso: val = piso
+                    else: piso = val
+                    
+                    if val >= umbral:
+                        if y < anio_critico:
+                            anio_critico = y
+                            tipo_inv = "Pavimentación" if es_granular else "Segunda Calzada"
+                        break
+            except: continue
+                
+        if anio_critico <= 2045:
+            resultados.append({"Rol": rol, "Anio": int(anio_critico), "Tipo": tipo_inv, "Provincia": str(provincia).upper()})
+            
+    return pd.DataFrame(resultados)
+# -----------------------------------------------------------
+
 # Funciones Matemáticas de Diseño Estructural
 def calcular_so_polinomico(eeq, cv_cbr):
     A5, A6, A7 = 500000, 1500000, 5000000
@@ -157,10 +214,12 @@ st.sidebar.markdown("---")
 btn_calc = st.sidebar.button("Generar Informe Técnico 🚀")
 if btn_calc:
     st.session_state.informe_generado = True
+if st.sidebar.button("🏠 Volver a Visión Regional"):
+    st.session_state.informe_generado = False
 
 # --- 5. INTERFAZ PRINCIPAL ---
 if not st.session_state.informe_generado:
-    # PORTADA
+    # --- PORTADA Y DASHBOARD REGIONAL (NUEVO) ---
     st.markdown("<br><br>", unsafe_allow_html=True)
     st.markdown("""
         <h1 style='text-align: center; color: #0E1117; font-size: 55px;'>
@@ -171,6 +230,48 @@ if not st.session_state.informe_generado:
         </h2>
     """, unsafe_allow_html=True)
     st.markdown("---")
+    
+    with st.spinner("Analizando la red vial completa de la región..."):
+        df_alertas = analizar_red_vial_completa(df, df_inv)
+
+    st.markdown("<h3 style='text-align: center;'>Planificación de Inversiones Prioritarias (2025-2045)</h3>", unsafe_allow_html=True)
+    
+    tabs_reg = st.tabs(["🌎 Región Global", "📍 Provincia de Talca", "📍 Provincia de Curicó", "📍 Provincia de Linares", "📍 Provincia de Cauquenes"])
+
+    def plot_dashboard(data, titulo):
+        if data.empty:
+            st.info(f"No hay proyectos críticos detectados para {titulo} en el periodo de diseño.")
+            return
+            
+        pivote = data.groupby(['Anio', 'Tipo']).size().unstack(fill_value=0)
+        anios_full = np.arange(2025, 2046)
+        pivote = pivote.reindex(anios_full, fill_value=0)
+        
+        fig, ax = plt.subplots(figsize=(10, 4.5))
+        pivote.plot(kind='bar', stacked=False, ax=ax, color=['#2ca02c', '#ff7f0e'], width=0.8)
+        
+        ax.set_title(f"Inversiones Requeridas por Saturación: {titulo}")
+        ax.set_ylabel("Cantidad de Proyectos")
+        ax.set_xlabel("Año Crítico")
+        ax.xaxis.set_major_locator(MaxNLocator(integer=True))
+        
+        # Asegurarnos de que las leyendas siempre estén correctas aunque falte una categoría
+        handles, labels = ax.get_legend_handles_labels()
+        ax.legend(handles, labels, loc='upper left')
+        
+        ax.grid(axis='y', alpha=0.3)
+        st.pyplot(fig)
+        
+        with st.expander(f"📄 Ver detalle de Rutas y Años Críticos en {titulo}"):
+            st.dataframe(data.sort_values('Anio').reset_index(drop=True))
+
+    with tabs_reg[0]: plot_dashboard(df_alertas, "Región del Maule")
+    with tabs_reg[1]: plot_dashboard(df_alertas[df_alertas['Provincia'].str.contains('TALCA', case=False, na=False)], "Provincia de Talca")
+    with tabs_reg[2]: plot_dashboard(df_alertas[df_alertas['Provincia'].str.contains('CURICO|CURICÓ', case=False, na=False)], "Provincia de Curicó")
+    with tabs_reg[3]: plot_dashboard(df_alertas[df_alertas['Provincia'].str.contains('LINARES', case=False, na=False)], "Provincia de Linares")
+    with tabs_reg[4]: plot_dashboard(df_alertas[df_alertas['Provincia'].str.contains('CAUQUENES', case=False, na=False)], "Provincia de Cauquenes")
+
+    st.markdown("<br><hr>", unsafe_allow_html=True)
     st.markdown("""
         <h3 style='text-align: center; color: #1f77b4;'>
             Desarrollado por José Tapia
@@ -179,8 +280,7 @@ if not st.session_state.informe_generado:
             Memoria para optar al título de Ingeniero Civil
         </p>
     """, unsafe_allow_html=True)
-    st.markdown("<br>", unsafe_allow_html=True)
-    st.info("👈 Seleccione un camino en el menú lateral para iniciar el análisis.")
+    st.info("👈 Seleccione un camino en el menú lateral para iniciar el análisis estructural detallado.")
 
 else:
     # EXTRACCIÓN DE DATOS DEL TRAMO
@@ -376,7 +476,7 @@ else:
 
 
     # ==========================================
-    # PESTAÑA 2: DISEÑO ESTRUCTURAL (HABILITADO PARA SEGUNDA CALZADA)
+    # PESTAÑA 2: DISEÑO ESTRUCTURAL (INTOCABLE)
     # ==========================================
     with tab_diseno:
         if info_inv is None:
@@ -507,7 +607,7 @@ else:
 
 
     # ==========================================
-    # PESTAÑA 3: PRESUPUESTO OBRA GRUESA (INTOCABLE - POR AHORA)
+    # PESTAÑA 3: PRESUPUESTO OBRA GRUESA (INTOCABLE)
     # ==========================================
     with tab_presupuesto:
         if not es_granular:
