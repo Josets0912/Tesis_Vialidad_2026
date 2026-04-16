@@ -618,23 +618,24 @@ else:
 
 
     # ==========================================
-    # PESTAÑA 3: PRESUPUESTO OBRA GRUESA
+    # PESTAÑA 3: PRESUPUESTO OBRA GRUESA (MODIFICADO)
     # ==========================================
     with tab_presupuesto:
-        if not es_granular:
-            st.warning(f"⚠️ Este camino ya cuenta con una superficie de **{carpeta}**. El cálculo de presupuesto de pavimentación inicial está deshabilitado.")
-        elif info_inv is None:
+        if info_inv is None:
             st.warning("⚠️ No existen datos del inventario para calcular el presupuesto de este Rol.")
         else:
             st.header("💰 Cubicaciones y Presupuesto Referencial")
             st.markdown("---")
 
-            st.subheader("📏 Geometría del Proyecto")
+            st.subheader("📏 Geometría del Proyecto a Intervenir")
             col_g1, col_g2, col_g3 = st.columns(3)
             
             with col_g1:
-                st.metric("Longitud del Tramo", f"{largo_km:.2f} km")
-                largo_m = largo_km * 1000
+                max_largo = float(largo_km) if largo_km > 0 else 1.0
+                largo_intervenir = st.number_input("Longitud a intervenir (km)", min_value=0.1, value=max_largo, step=0.1)
+                largo_m = largo_intervenir * 1000
+                st.caption(f"Largo total según inventario: {max_largo:.2f} km")
+                
             with col_g2:
                 ancho_calzada = st.number_input("Ancho de Calzada / Cape Seal (m)", min_value=3.0, max_value=12.0, value=6.0, step=0.1)
             with col_g3:
@@ -649,7 +650,7 @@ else:
             h_sub_m = st.session_state.inp_d3 / 100.0
 
             # Geometría Asfalto/Imprimación
-            area_capeseal = ancho_calzada * largo_m
+            sup_asf = ancho_calzada * largo_m
             area_imprimacion = ancho_imprimacion * largo_m
 
             # Geometría Base Granular
@@ -662,8 +663,22 @@ else:
             ancho_subbase_inf = ancho_subbase_sup + (h_sub_m * 3.0)
             area_subbase = ancho_subbase_sup * largo_m 
             
+            # Lógica Asfalto vs Capseal
+            if is_cape_seal:
+                nombre_asfalto = "Cape Seal / TSD"
+                uni_asf = "m²"
+                cant_asf = sup_asf
+                pu_asf = 7800
+                delta_asf = "Espesor: N/A"
+            else:
+                nombre_asfalto = "Concreto Asfáltico (MAC)"
+                uni_asf = "m³"
+                cant_asf = round(sup_asf * (st.session_state.inp_d1 / 100.0), 1)
+                pu_asf = 250000
+                delta_asf = f"Espesor: {st.session_state.inp_d1} cm"
+
             c_cub1, c_cub2, c_cub3, c_cub4 = st.columns(4)
-            c_cub1.metric("Área Cape Seal", f"{area_capeseal:,.1f} m²")
+            c_cub1.metric(f"Cantidad {nombre_asfalto}", f"{cant_asf:,.1f} {uni_asf}", delta_asf, delta_color="off")
             c_cub2.metric("Área Imprimación", f"{area_imprimacion:,.1f} m²")
             c_cub3.metric("Volumen Base", f"{vol_base:,.1f} m³", f"Espesor: {st.session_state.inp_d2} cm", delta_color="off")
             c_cub4.metric("Área Subbase", f"{area_subbase:,.1f} m²", f"Espesor: {st.session_state.inp_d3} cm", delta_color="off")
@@ -671,25 +686,24 @@ else:
             st.markdown("---")
             st.subheader("💵 Valorización")
             
-            pu_capeseal = 7800
             pu_imprimacion = 1500
             pu_base = 40000
             pu_subbase = 1300
 
-            tot_capeseal = area_capeseal * pu_capeseal
+            tot_asfalto = cant_asf * pu_asf
             tot_imprimacion = area_imprimacion * pu_imprimacion
             tot_base = vol_base * pu_base
             tot_subbase = area_subbase * pu_subbase
-            tot_proyecto = tot_capeseal + tot_imprimacion + tot_base + tot_subbase
+            tot_proyecto = tot_asfalto + tot_imprimacion + tot_base + tot_subbase
 
             col_p1, col_p2 = st.columns([2, 1])
             with col_p1:
                 df_presupuesto = pd.DataFrame({
-                    "Ítem": ["Cape Seal", "Imprimación Asfáltica", "Base Granular (CBR 100%)", "Subbase Granular"],
-                    "Unidad": ["m²", "m²", "m³", "m²"],
-                    "Cantidad": [area_capeseal, area_imprimacion, vol_base, area_subbase],
-                    "P.U. ($)": [pu_capeseal, pu_imprimacion, pu_base, pu_subbase],
-                    "Total ($)": [tot_capeseal, tot_imprimacion, tot_base, tot_subbase]
+                    "Ítem": [nombre_asfalto, "Imprimación Asfáltica", "Base Granular (CBR 100%)", "Subbase Granular"],
+                    "Unidad": [uni_asf, "m²", "m³", "m²"],
+                    "Cantidad": [cant_asf, area_imprimacion, vol_base, area_subbase],
+                    "P.U. ($)": [pu_asf, pu_imprimacion, pu_base, pu_subbase],
+                    "Total ($)": [tot_asfalto, tot_imprimacion, tot_base, tot_subbase]
                 })
                 
                 df_visual = df_presupuesto.copy()
@@ -721,7 +735,12 @@ else:
             y_sub = [-h_base_m - 0.03, -h_base_m - 0.03, -h_base_m - h_sub_m - 0.03, -h_base_m - h_sub_m - 0.03]
             
             # EL ORDEN INVERTIDO PARA QUE LA LEYENDA SALGA DE ARRIBA HACIA ABAJO
-            ax_t.fill(x_cs, y_cs, color='#222222', label='Cape Seal')
+            if is_cape_seal:
+                ax_t.fill(x_cs, y_cs, color='#222222', label='Cape Seal')
+            else:
+                y_asf = [0, 0, -(st.session_state.inp_d1/100.0), -(st.session_state.inp_d1/100.0)]
+                ax_t.fill(x_cs, y_asf, color='#444444', label=f'Concreto Asfáltico ({st.session_state.inp_d1} cm)')
+
             ax_t.fill(x_imp, y_imp, color='#888888') # Sin etiqueta en la leyenda
             ax_t.fill(x_base, y_base, color='#d4b872', label=f'Base Granular ({st.session_state.inp_d2} cm)')
             ax_t.fill(x_sub, y_sub, color='#a67c52', label=f'Subbase ({st.session_state.inp_d3} cm)')
