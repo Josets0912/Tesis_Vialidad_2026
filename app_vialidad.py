@@ -100,7 +100,8 @@ def analizar_red_vial_completa(df_m, df_i):
             except: continue
                 
         if anio_critico <= 2045:
-            resultados.append({"Rol": rol, "Anio": int(anio_critico), "Tipo": tipo_inv, "Provincia": str(provincia).upper()})
+            # CAMBIO APLICADO: "Año" en lugar de "Anio"
+            resultados.append({"Rol": rol, "Año": int(anio_critico), "Tipo": tipo_inv, "Provincia": str(provincia).upper()})
             
     return pd.DataFrame(resultados)
 # -----------------------------------------------------------
@@ -249,7 +250,8 @@ if not st.session_state.informe_generado:
             st.info(f"No hay proyectos críticos detectados para {titulo} en el periodo de diseño.")
             return
             
-        pivote = data.groupby(['Anio', 'Tipo']).size().unstack(fill_value=0)
+        # CAMBIO APLICADO: Uso de 'Año'
+        pivote = data.groupby(['Año', 'Tipo']).size().unstack(fill_value=0)
         anios_full = np.arange(2025, 2046)
         pivote = pivote.reindex(anios_full, fill_value=0)
         
@@ -274,7 +276,8 @@ if not st.session_state.informe_generado:
         st.pyplot(fig)
         
         with st.expander(f"📄 Ver detalle de Rutas y Años Críticos en {titulo}"):
-            st.dataframe(data.sort_values('Anio').reset_index(drop=True))
+            # CAMBIO APLICADO: Ordenar por 'Año'
+            st.dataframe(data.sort_values('Año').reset_index(drop=True))
 
     with tabs_reg[0]: plot_dashboard(df_alertas, "Región del Maule")
     with tabs_reg[1]: plot_dashboard(df_alertas[df_alertas['Provincia'].str.contains('TALCA', case=False, na=False)], "Provincia de Talca")
@@ -323,7 +326,7 @@ else:
                 try: val_km_fin = float(info_inv[col])
                 except: pass
                 
-    largo_km = abs(val_km_fin - val_km_ini) if km_ini != "No Inf" and km_fin != "No Inf" else 1.0
+    largo_km_inventario = abs(val_km_fin - val_km_ini) if km_ini != "No Inf" and km_fin != "No Inf" else 1.0
 
     # TÍTULO PRINCIPAL
     st.markdown("### 🚧 Sistema de Gestión de Pavimentos y Proyección de Demanda")
@@ -340,8 +343,8 @@ else:
     with c6: st.markdown(f"<div class='info-card'><div class='info-label'>Km Final</div><div class='info-value'>{km_fin}</div></div>", unsafe_allow_html=True)
     st.markdown("---")
 
-    # CREACIÓN DE PESTAÑAS
-    tab_demanda, tab_diseno, tab_presupuesto = st.tabs(["📈 Análisis de Demanda y Proyección", "🛣️ Diseño Estructural (AASHTO 93)", "💰 Presupuesto Obra Gruesa"])
+    # CREACIÓN DE PESTAÑAS (CAMBIO APLICADO: "Presupuesto Capas Estructurales")
+    tab_demanda, tab_diseno, tab_presupuesto = st.tabs(["📈 Análisis de Demanda y Proyección", "🛣️ Diseño Estructural (AASHTO 93)", "💰 Presupuesto Capas Estructurales"])
 
     # ==========================================
     # PESTAÑA 1: ANÁLISIS DE DEMANDA
@@ -618,7 +621,7 @@ else:
 
 
     # ==========================================
-    # PESTAÑA 3: PRESUPUESTO OBRA GRUESA (MODIFICADO)
+    # PESTAÑA 3: PRESUPUESTO CAPAS ESTRUCTURALES
     # ==========================================
     with tab_presupuesto:
         if info_inv is None:
@@ -631,7 +634,7 @@ else:
             col_g1, col_g2, col_g3 = st.columns(3)
             
             with col_g1:
-                max_largo = float(largo_km) if largo_km > 0 else 1.0
+                max_largo = float(largo_km_inventario) if largo_km_inventario > 0 else 1.0
                 largo_intervenir = st.number_input("Longitud a intervenir (km)", min_value=0.1, value=max_largo, step=0.1)
                 largo_m = largo_intervenir * 1000
                 st.caption(f"Largo total según inventario: {max_largo:.2f} km")
