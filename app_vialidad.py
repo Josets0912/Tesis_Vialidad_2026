@@ -202,13 +202,19 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- 4. MENÚ LATERAL ---
+# --- 4. MENÚ LATERAL (MODIFICADO CON RESET AUTOMÁTICO) ---
 st.sidebar.header("🔍 Panel de Control")
+
+# Esta función apaga el informe cuando cambias de camino
+def reset_vista():
+    st.session_state.informe_generado = False
+
 roles = sorted(df['ROL NUEVO'].dropna().astype(str).unique())
-rol_sel = st.sidebar.selectbox("Seleccione Rol Oficial:", roles)
+# Le decimos a las casillas que ejecuten la función reset_vista al cambiar
+rol_sel = st.sidebar.selectbox("Seleccione Rol Oficial:", roles, on_change=reset_vista)
 df_rol = df[df['ROL NUEVO'] == rol_sel].copy()
 df_rol['ETIQUETA'] = df_rol['NOMBRE DEL CAMINO'] + " (" + df_rol['ESTACIÓN'] + ")"
-tramo_sel = st.sidebar.selectbox("Seleccione Sector:", df_rol['ETIQUETA'].tolist())
+tramo_sel = st.sidebar.selectbox("Seleccione Sector:", df_rol['ETIQUETA'].tolist(), on_change=reset_vista)
 
 st.sidebar.markdown("---")
 btn_calc = st.sidebar.button("Generar Informe Técnico 🚀")
@@ -219,7 +225,7 @@ if st.sidebar.button("🏠 Volver a Visión Regional"):
 
 # --- 5. INTERFAZ PRINCIPAL ---
 if not st.session_state.informe_generado:
-    # --- PORTADA Y DASHBOARD REGIONAL (MODIFICADO AQUÍ SEGÚN SOLICITUD) ---
+    # --- PORTADA Y DASHBOARD REGIONAL ---
     st.markdown("<br><br>", unsafe_allow_html=True)
     st.markdown("""
         <h1 style='text-align: center; color: #0E1117; font-size: 55px;'>
@@ -254,14 +260,12 @@ if not st.session_state.informe_generado:
         ax.set_ylabel("Cantidad de Proyectos")
         ax.set_xlabel("Año Crítico")
         
-        # --- MODIFICACIONES SOLICITADAS: Eje X de 1 en 1, Eje Y con Holgura de 5 ---
         ax.set_xticks(range(len(anios_full)))
         ax.set_xticklabels(anios_full, rotation=45, ha='right')
         
         max_proyectos = pivote.values.max() if not pivote.empty else 0
         ax.set_ylim(0, max_proyectos + 5)
         ax.yaxis.set_major_locator(MaxNLocator(integer=True))
-        # -------------------------------------------------------------------------
         
         handles, labels = ax.get_legend_handles_labels()
         ax.legend(handles, labels, loc='upper left')
@@ -290,7 +294,7 @@ if not st.session_state.informe_generado:
     st.info("👈 Seleccione un camino en el menú lateral para iniciar el análisis estructural detallado.")
 
 else:
-    # EXTRACCIÓN DE DATOS DEL TRAMO (CANDADO 🔒)
+    # EXTRACCIÓN DE DATOS DEL TRAMO
     fila = df_rol[df_rol['ETIQUETA'] == tramo_sel].iloc[0]
     nombre = fila['NOMBRE DEL CAMINO']
     sector_especifico = fila['Sector'] if 'Sector' in fila else "Sector No Especificado"
@@ -340,7 +344,7 @@ else:
     tab_demanda, tab_diseno, tab_presupuesto = st.tabs(["📈 Análisis de Demanda y Proyección", "🛣️ Diseño Estructural (AASHTO 93)", "💰 Presupuesto Obra Gruesa"])
 
     # ==========================================
-    # PESTAÑA 1: ANÁLISIS DE DEMANDA (CANDADO 🔒)
+    # PESTAÑA 1: ANÁLISIS DE DEMANDA
     # ==========================================
     with tab_demanda:
         anios_censo = [2015, 2017, 2018, 2020, 2022, 2024]
@@ -483,7 +487,7 @@ else:
 
 
     # ==========================================
-    # PESTAÑA 2: DISEÑO ESTRUCTURAL (CANDADO 🔒)
+    # PESTAÑA 2: DISEÑO ESTRUCTURAL
     # ==========================================
     with tab_diseno:
         if info_inv is None:
@@ -614,7 +618,7 @@ else:
 
 
     # ==========================================
-    # PESTAÑA 3: PRESUPUESTO OBRA GRUESA (CANDADO 🔒)
+    # PESTAÑA 3: PRESUPUESTO OBRA GRUESA
     # ==========================================
     with tab_presupuesto:
         if not es_granular:
