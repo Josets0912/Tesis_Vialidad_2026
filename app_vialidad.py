@@ -574,7 +574,21 @@ else:
                 m2 = st.number_input(f"Coef. Drenaje Base", value=m_sugerido, format="%.2f")
                 m3 = st.number_input(f"Coef. Drenaje Subbase", value=m_sugerido, format="%.2f")
 
-           with col_opt:
+           col_mat1, col_mat2, col_opt = st.columns([1, 1, 1.2])
+            with col_mat1:
+                is_cape_seal = st.checkbox("🛣️ Camino Básico (Cape Seal / TSD)", value=not es_pavimentado)
+                val_a1 = 0.000 if is_cape_seal else 0.197
+                a1 = st.number_input("Coef. Asfalto (1/mm)", value=val_a1, disabled=True, format="%.3f")
+                a2 = st.number_input("Coef. Base (1/mm)", value=0.090, format="%.3f")
+                a3 = st.number_input("Coef. Subbase (1/mm)", value=0.090, format="%.3f")
+            
+            with col_mat2:
+                precip = info_inv['Precipitacion promedio Mensual (mm)']
+                m_sugerido = 0.8 if precip > 80 else (1.0 if precip > 40 else 1.1)
+                m2 = st.number_input(f"Coef. Drenaje Base", value=m_sugerido, format="%.2f")
+                m3 = st.number_input(f"Coef. Drenaje Subbase", value=m_sugerido, format="%.2f")
+
+            with col_opt:
                 st.markdown("<br>", unsafe_allow_html=True)
                 st.info("💡 Ejecuta la macro para buscar la combinación óptima.")
                 if st.button("🔄 Ejecutar Optimización (Macro)"):
