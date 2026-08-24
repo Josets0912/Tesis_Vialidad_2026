@@ -125,16 +125,35 @@ def calcular_ee_soportado(d1, d2, d3, a1, a2, a3, m2, m3, zr_val, so_val, pi_val
     except: return 0
 
 def optimizar_espesores_vba(ee_req, a1, a2, a3, m2, m3, zr_val, so_val, pi_val, pf_val, mr_val_mpa, is_cape_seal):
+    # El asfalto es lo más caro: se fija en 5 cm (o 0 si es Cape Seal) y solo sube como última opción
     asf_rango = [0] if is_cape_seal else range(5, 16)
-    for hAsf in asf_rango:
-        for sumaGranular in range(25, 131):
-            for hBase in range(10, 51):
-                hSub = sumaGranular - hBase
-                if 15 <= hSub <= 80:
-                    ee_dis = calcular_ee_soportado(hAsf, hBase, hSub, a1, a2, a3, m2, m3, zr_val, so_val, pi_val, pf_val, mr_val_mpa)
-                    if ee_dis >= ee_req: return int(hAsf), int(hBase), int(hSub), ee_dis
-    return None, None, None, None
+    
+    # Construimos la secuencia "modo reloj": 3 cm de subbase por 1 cm de base
+    secuencia_granulares = []
+    b, s = 10, 15
+    pasos_s = 0
+    
+    while b <= 50 and s <= 80:
+        secuencia_granulares.append((b, s))
+        if pasos_s < 3 and s < 80:
+            s += 1
+            pasos_s += 1
+        elif b < 50:
+            b += 1
+            pasos_s = 0
+        elif s < 80:
+            s += 1
+        else:
+            break
 
+    # Ejecutamos la optimización siguiendo estrictamente el orden económico
+    for hAsf in asf_rango:
+        for hBase, hSub in secuencia_granulares:
+            ee_dis = calcular_ee_soportado(hAsf, hBase, hSub, a1, a2, a3, m2, m3, zr_val, so_val, pi_val, pf_val, mr_val_mpa)
+            if ee_dis >= ee_req: 
+                return int(hAsf), int(hBase), int(hSub), ee_dis
+                
+    return None, None, None, None
 df, df_inv = cargar_datos()
 
 # --- 3. ESTILOS CSS ---
