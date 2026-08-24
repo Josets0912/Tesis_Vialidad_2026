@@ -19,9 +19,9 @@ st.set_page_config(
 
 if "informe_generado" not in st.session_state:
     st.session_state.informe_generado = False
-if "inp_d1" not in st.session_state: st.session_state.inp_d1 = 5
-if "inp_d2" not in st.session_state: st.session_state.inp_d2 = 10
-if "inp_d3" not in st.session_state: st.session_state.inp_d3 = 15
+if "inp_d1" not in st.session_state: st.session_state.inp_d1 = 5.0
+if "inp_d2" not in st.session_state: st.session_state.inp_d2 = 10.0
+if "inp_d3" not in st.session_state: st.session_state.inp_d3 = 15.0
 
 # --- 2. FUNCIONES Y DATOS ---
 @st.cache_data
@@ -125,23 +125,13 @@ def calcular_ee_soportado(d1, d2, d3, a1, a2, a3, m2, m3, zr_val, so_val, pi_val
     except: return 0
 
 def optimizar_espesores_vba(ee_req, a1, a2, a3, m2, m3, zr_val, so_val, pi_val, pf_val, mr_val_mpa, is_cape_seal):
-    # Rango de asfalto: 0 si es Cape Seal. Si es pavimento, parte en 5 cm (mínimo exigido).
-    asf_rango = [0] if is_cape_seal else range(5, 16) 
-    
-    # BUCLE 1 (Externo): Fija el asfalto. Al estar afuera, el asfalto subirá a 6 cm 
-    # SOLAMENTE como última opción, si las capas granulares no logran soportar el tránsito.
-    for hAsf in asf_rango:
-        # BUCLE 2 (Medio): Suma del paquete granular (Base + Subbase), desde 25 cm hasta 130 cm.
-        for sumaGranular in range(25, 131):
-            # BUCLE 3 (Interno): Distribuye los centímetros entre Base y Subbase.
-            for hBase in range(10, 51):
-                hSub = sumaGranular - hBase
-                if 15 <= hSub <= 80: # Límites constructivos de la subbase
-                    ee_dis = calcular_ee_soportado(hAsf, hBase, hSub, a1, a2, a3, m2, m3, zr_val, so_val, pi_val, pf_val, mr_val_mpa)
-                    # Si la estructura soporta la carga, detiene la búsqueda y entrega el diseño óptimo.
-                    if ee_dis >= ee_req: 
-                        return int(hAsf), int(hBase), int(hSub), ee_dis
-                        
+    hAsf = 0.0 if is_cape_seal else 5.0
+    for sumaGranular in range(25, 131):
+        for hBase in range(10, 51):
+            hSub = sumaGranular - hBase
+            if 15 <= hSub <= 80:
+                ee_dis = calcular_ee_soportado(hAsf, hBase, hSub, a1, a2, a3, m2, m3, zr_val, so_val, pi_val, pf_val, mr_val_mpa)
+                if ee_dis >= ee_req: return float(hAsf), float(hBase), float(hSub), ee_dis
     return None, None, None, None
 
 df, df_inv = cargar_datos()
@@ -574,27 +564,13 @@ else:
                 m2 = st.number_input(f"Coef. Drenaje Base", value=m_sugerido, format="%.2f")
                 m3 = st.number_input(f"Coef. Drenaje Subbase", value=m_sugerido, format="%.2f")
 
-           col_mat1, col_mat2, col_opt = st.columns([1, 1, 1.2])
-            with col_mat1:
-                is_cape_seal = st.checkbox("🛣️ Camino Básico (Cape Seal / TSD)", value=not es_pavimentado)
-                val_a1 = 0.000 if is_cape_seal else 0.197
-                a1 = st.number_input("Coef. Asfalto (1/mm)", value=val_a1, disabled=True, format="%.3f")
-                a2 = st.number_input("Coef. Base (1/mm)", value=0.090, format="%.3f")
-                a3 = st.number_input("Coef. Subbase (1/mm)", value=0.090, format="%.3f")
-            
-            with col_mat2:
-                precip = info_inv['Precipitacion promedio Mensual (mm)']
-                m_sugerido = 0.8 if precip > 80 else (1.0 if precip > 40 else 1.1)
-                m2 = st.number_input(f"Coef. Drenaje Base", value=m_sugerido, format="%.2f")
-                m3 = st.number_input(f"Coef. Drenaje Subbase", value=m_sugerido, format="%.2f")
-
             with col_opt:
                 st.markdown("<br>", unsafe_allow_html=True)
                 st.info("💡 Ejecuta la macro para buscar la combinación óptima.")
                 if st.button("🔄 Ejecutar Optimización (Macro)"):
                     opt_d1, opt_d2, opt_d3, opt_ee = optimizar_espesores_vba(eeq_val, a1, a2, a3, m2, m3, zr_val, so_val, pi_val, pf_val, mr_val_mpa, is_cape_seal)
                     if opt_d1 is not None:
-                        st.session_state.inp_d1, st.session_state.inp_d2, st.session_state.inp_d3 = int(opt_d1), int(opt_d2), int(opt_d3)
+                        st.session_state.inp_d1, st.session_state.inp_d2, st.session_state.inp_d3 = float(opt_d1), float(opt_d2), float(opt_d3)
                         st.success("✅ ¡Diseño óptimo encontrado!")
                         st.rerun()
                     else: st.error("❌ No se encontró solución factible en los rangos.")
@@ -604,13 +580,13 @@ else:
             st.subheader("🏗️ Propuesta Estructural Interactiva")
             col_esp, col_graf = st.columns([1, 1.5])
             with col_esp:
-                if is_cape_seal: st.session_state.inp_d1 = 0
-                elif st.session_state.inp_d1 < 5: st.session_state.inp_d1 = 5
+                if is_cape_seal: st.session_state.inp_d1 = 0.0
+                elif st.session_state.inp_d1 < 5.0: st.session_state.inp_d1 = 5.0
 
-                min_d1 = 0 if is_cape_seal else 5
-                d1 = st.number_input("Carpeta Asfáltica (cm)", min_value=min_d1, step=1, key="inp_d1", disabled=is_cape_seal)
-                d2 = st.number_input("Base Granular (cm)", min_value=10, step=1, key="inp_d2")
-                d3 = st.number_input("Subbase Granular (cm)", min_value=15, step=1, key="inp_d3")
+                min_d1 = 0.0 if is_cape_seal else 5.0
+                d1 = st.number_input("Carpeta Asfáltica (cm)", min_value=min_d1, step=0.5, key="inp_d1", disabled=is_cape_seal)
+                d2 = st.number_input("Base Granular (cm)", min_value=10.0, step=0.5, key="inp_d2")
+                d3 = st.number_input("Subbase Granular (cm)", min_value=15.0, step=0.5, key="inp_d3")
 
                 ne_aportado = (d1 * 10 * 1 * a1) + (d2 * 10 * m2 * a2) + (d3 * 10 * m3 * a3)
                 st.markdown(f"<div class='sn-box'><h4>NE Aportado: <b>{ne_aportado:.2f} mm</b></h4></div>", unsafe_allow_html=True)
