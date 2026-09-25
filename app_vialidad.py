@@ -268,7 +268,6 @@ if not st.session_state.informe_generado:
     def plot_dashboard(data, titulo):
         if data.empty:
             st.info(f"No hay proyectos críticos detectados para {titulo} en el periodo de diseño.")
-            st.stop()
             return
             
         # CAMBIO APLICADO: Uso de 'Año'
