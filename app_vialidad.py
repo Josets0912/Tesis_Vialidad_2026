@@ -65,15 +65,36 @@ def analizar_red_vial_completa(df_m, df_i):
         info_inv = df_i[df_i['Rol'] == rol]
         provincia = info_inv.iloc[0]['Provincia'] if (not info_inv.empty and 'Provincia' in info_inv.columns) else "Sin Info"
         
-        carpeta_actual = str(estaciones_rol.iloc[0]['TIPO DE CARPETA']).upper()
-        es_granular = any(x in carpeta_actual for x in ["RIPIO", "GRANULAR", "TIERRA", "SUELO", "NATURAL"])
-        umbral = 300 if es_granular else 5000
-        
         for _, fila in estaciones_rol.iterrows():
             try:
-                vals = fila[[f'TMDA {a}' for a in anios_censo]].values.flatten().astype(float)
-                serie = pd.Series(vals, index=anios_censo).sort_index()
+                # 1. Definir materialidad y descartar si ya es doble vía
+                carpeta_actual = str(fila['TIPO DE CARPETA']).upper()
+                calzada_actual = str(fila['CALZADA']).upper() if 'CALZADA' in fila else ""
+                es_doble_via = "DOBLE" in calzada_actual or "DOBLE" in carpeta_actual
                 
+                if es_doble_via:
+                    continue # Saltamos este camino porque no necesita segunda calzada
+                    
+                es_granular = any(x in carpeta_actual for x in ["RIPIO", "GRANULAR", "TIERRA", "SUELO", "NATURAL"])
+                umbral = 300 if es_granular else 5000
+
+                # 2. Agregar la interpolación que faltaba (Igual a la pestaña individual)
+                vals_censo = fila[[f'TMDA {a}' for a in anios_censo]].values.flatten().astype(float)
+                datos_reales = pd.Series(vals_censo, index=anios_censo).sort_index()
+                
+                serie_completa = {}
+                for i in range(len(anios_censo) - 1):
+                    a_inicio, a_fin = anios_censo[i], anios_censo[i+1]
+                    v_inicio, v_fin = datos_reales[a_inicio], datos_reales[a_fin]
+                    serie_completa[a_inicio] = v_inicio
+                    n_anios = a_fin - a_inicio
+                    if n_anios > 1:
+                        r = (v_fin / v_inicio) ** (1/n_anios) - 1 if v_inicio > 0 else 0
+                        for k in range(1, n_anios): serie_completa[a_inicio + k] = v_inicio * ((1 + r) ** k)
+                serie_completa[anios_censo[-1]] = datos_reales[anios_censo[-1]]
+                serie = pd.Series(serie_completa).sort_index()
+                
+                # 3. Modelo Holt-Winters (Ahora sí recibirá la serie completa)
                 try: modelo = ExponentialSmoothing(serie, trend='mul', damped_trend=True).fit(damping_trend=0.92)
                 except: modelo = ExponentialSmoothing(serie, trend='add', damped_trend=True).fit(damping_trend=0.92)
                     
@@ -97,17 +118,8 @@ def analizar_red_vial_completa(df_m, df_i):
                             anio_critico = y
                             tipo_inv = "Pavimentación" if es_granular else "Segunda Calzada"
                         break
-            except: continue
-                
-        if anio_critico <= 2045:
-            resultados.append({"Rol": rol, "Año": int(anio_critico), "Tipo": tipo_inv, "Provincia": str(provincia).upper()})
-            
-    # --- CÓDIGO NUEVO/CORREGIDO AQUÍ ---
-    if not resultados:
-        # Si la lista está vacía, forzamos la creación de las columnas
-        return pd.DataFrame(columns=["Rol", "Año", "Tipo", "Provincia"])
-        
-    return pd.DataFrame(resultados)
+            except Exception as e: 
+                continue
 # -----------------------------------------------------------
 
 # Funciones Matemáticas de Diseño Estructural
