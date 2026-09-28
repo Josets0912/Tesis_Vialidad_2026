@@ -78,7 +78,7 @@ def analizar_red_vial_completa(df_m, df_i):
                 es_granular = any(x in carpeta_actual for x in ["RIPIO", "GRANULAR", "TIERRA", "SUELO", "NATURAL"])
                 umbral = 300 if es_granular else 5000
 
-                # 2. Agregar la interpolación que faltaba (Igual a la pestaña individual)
+                # 2. Agregar la interpolación que faltaba
                 vals_censo = fila[[f'TMDA {a}' for a in anios_censo]].values.flatten().astype(float)
                 datos_reales = pd.Series(vals_censo, index=anios_censo).sort_index()
                 
@@ -94,7 +94,7 @@ def analizar_red_vial_completa(df_m, df_i):
                 serie_completa[anios_censo[-1]] = datos_reales[anios_censo[-1]]
                 serie = pd.Series(serie_completa).sort_index()
                 
-                # 3. Modelo Holt-Winters (Ahora sí recibirá la serie completa)
+                # 3. Modelo Holt-Winters con la serie completa
                 try: modelo = ExponentialSmoothing(serie, trend='mul', damped_trend=True).fit(damping_trend=0.92)
                 except: modelo = ExponentialSmoothing(serie, trend='add', damped_trend=True).fit(damping_trend=0.92)
                     
@@ -120,6 +120,15 @@ def analizar_red_vial_completa(df_m, df_i):
                         break
             except Exception as e: 
                 continue
+                
+        if anio_critico <= 2045:
+            resultados.append({"Rol": rol, "Año": int(anio_critico), "Tipo": tipo_inv, "Provincia": str(provincia).upper()})
+            
+    # --- BLINDAJE PARA EVITAR CAÍDAS SI NO HAY RESULTADOS ---
+    if not resultados:
+        return pd.DataFrame(columns=["Rol", "Año", "Tipo", "Provincia"])
+        
+    return pd.DataFrame(resultados)
 # -----------------------------------------------------------
 
 # Funciones Matemáticas de Diseño Estructural
