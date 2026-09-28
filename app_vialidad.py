@@ -5,7 +5,7 @@ import math
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator
 from statsmodels.tsa.holtwinters import ExponentialSmoothing
-import warning
+import warnings
 
 # Silenciamos advertencias matemáticas
 warnings.filterwarnings("ignore")
