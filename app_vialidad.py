@@ -100,9 +100,13 @@ def analizar_red_vial_completa(df_m, df_i):
             except: continue
                 
         if anio_critico <= 2045:
-            # CAMBIO APLICADO: "Año" en lugar de "Anio"
             resultados.append({"Rol": rol, "Año": int(anio_critico), "Tipo": tipo_inv, "Provincia": str(provincia).upper()})
             
+    # --- CÓDIGO NUEVO/CORREGIDO AQUÍ ---
+    if not resultados:
+        # Si la lista está vacía, forzamos la creación de las columnas
+        return pd.DataFrame(columns=["Rol", "Año", "Tipo", "Provincia"])
+        
     return pd.DataFrame(resultados)
 # -----------------------------------------------------------
 
