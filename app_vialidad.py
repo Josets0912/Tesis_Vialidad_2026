@@ -288,8 +288,6 @@ if not st.session_state.informe_generado:
 
     st.markdown("<h3 style='text-align: center;'>Planificación de Inversiones Prioritarias (2025-2045)</h3>", unsafe_allow_html=True)
     
-    tabs_reg = st.tabs(["🌎 Región Global", "📍 Provincia de Talca", "📍 Provincia de Curicó", "📍 Provincia de Linares", "📍 Provincia de Cauquenes"])
-
     def plot_dashboard(data, titulo):
         if data.empty:
             st.info(f"No hay proyectos críticos detectados para {titulo} en el periodo de diseño.")
@@ -324,11 +322,24 @@ if not st.session_state.informe_generado:
             # CAMBIO APLICADO: Ordenar por 'Año'
             st.dataframe(data.sort_values('Año').reset_index(drop=True))
 
-    with tabs_reg[0]: plot_dashboard(df_alertas, "Región del Maule")
-    with tabs_reg[1]: plot_dashboard(df_alertas[df_alertas['Provincia'].str.contains('TALCA', case=False, na=False)], "Provincia de Talca")
-    with tabs_reg[2]: plot_dashboard(df_alertas[df_alertas['Provincia'].str.contains('CURICO|CURICÓ', case=False, na=False)], "Provincia de Curicó")
-    with tabs_reg[3]: plot_dashboard(df_alertas[df_alertas['Provincia'].str.contains('LINARES', case=False, na=False)], "Provincia de Linares")
-    with tabs_reg[4]: plot_dashboard(df_alertas[df_alertas['Provincia'].str.contains('CAUQUENES', case=False, na=False)], "Provincia de Cauquenes")
+    # --- NUEVA ESTRUCTURA JERÁRQUICA: REGIÓN (PADRE) Y PROVINCIAS (HIJOS) ---
+    
+    # 1. FILA DE MÁS ARRIBA: El "Padre" (Región del Maule)
+    st.subheader("🗺️ Análisis Consolidado: Región del Maule")
+    with st.container():
+        plot_dashboard(df_alertas, "Región del Maule")
+
+    st.divider() # Línea sutil para separar jerarquías
+
+    # 2. FILA DE MÁS ABAJO: Los "Hijos" (Pestañas provinciales)
+    st.markdown("#### 📍 Desglose por Provincias")
+    tabs_prov = st.tabs(["Provincia de Talca", "Provincia de Curicó", "Provincia de Linares", "Provincia de Cauquenes"])
+    
+    with tabs_prov[0]: plot_dashboard(df_alertas[df_alertas['Provincia'].str.contains('TALCA', case=False, na=False)], "Provincia de Talca")
+    with tabs_prov[1]: plot_dashboard(df_alertas[df_alertas['Provincia'].str.contains('CURICO|CURICÓ', case=False, na=False)], "Provincia de Curicó")
+    with tabs_prov[2]: plot_dashboard(df_alertas[df_alertas['Provincia'].str.contains('LINARES', case=False, na=False)], "Provincia de Linares")
+    with tabs_prov[3]: plot_dashboard(df_alertas[df_alertas['Provincia'].str.contains('CAUQUENES', case=False, na=False)], "Provincia de Cauquenes")
+
 
     st.markdown("<br><hr>", unsafe_allow_html=True)
     st.markdown("""
