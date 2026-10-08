@@ -705,7 +705,7 @@ else:
                 st.caption(f"Largo total según inventario: {max_largo:.2f} km")
                 
             with col_g2:
-                ancho_calzada = st.number_input("Ancho de Calzada / Cape Seal (m)", min_value=3.0, max_value=12.0, value=6.0, step=0.1)
+                ancho_calzada = st.number_input("Ancho de Calzada / Cape Seal (m)", min_value=5.0, max_value=7.5, value=6.0, step=0.1)
             with col_g3:
                 ancho_imprimacion = ancho_calzada + 0.40
                 st.metric("Ancho Imprimación (+40 cm)", f"{ancho_imprimacion:.2f} m")
