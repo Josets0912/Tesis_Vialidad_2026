@@ -589,14 +589,19 @@ else:
             col_p1, col_p2, col_p3 = st.columns(3)
             with col_p1: zr_val = st.number_input("Confiabilidad (Zr)", value=-0.253, step=0.010, format="%.3f")
             with col_p2:
-                cv_cbr = st.number_input("Coef. Variación CBR (CV %)", value=50.0, step=5.0)
+                cv_cbr = st.number_input("Coef. Variación CBR (CV %)", min_value=0.0, max_value=50.0, value=50.0, step=5.0)
                 so_val = calcular_so_polinomico(eeq_val, cv_cbr)
                 st.info(f"Desviación ($S_o$): **{so_val:.4f}**")
             with col_p3:
                 col_pi, col_pf = st.columns(2)
-                with col_pi: pi_val = st.number_input("Serv. Inicial (pi)", value=4.2, step=0.1)
-                with col_pf: pf_val = st.number_input("Serv. Final (pf)", value=2.0, step=0.1)
+                with col_pi: pi_val = st.number_input("Serv. Inicial (pi)", min_value=2.1, max_value=5.0, value=4.2, step=0.1)
+                with col_pf: pf_val = st.number_input("Serv. Final (pf)", min_value=2.0, max_value=5.0, value=2.0, step=0.1)
 
+                # Lógica de restricción cruzada exigida por el profesor
+                if pf_val >= pi_val:
+                st.warning("⚠️ La Serviciabilidad Final (pf) no puede ser mayor o igual a la Inicial (pi). Se ajustará automáticamente para el cálculo.")
+                pf_val = pi_val - 0.1 # Fuerza matemáticamente a que sea menor
+  
             st.markdown("---")
 
             st.subheader("⚙️ Materiales y Cálculo Automático")
