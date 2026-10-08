@@ -729,7 +729,8 @@ else:
             # Geometría Subbase Granular
             ancho_subbase_sup = ancho_base_inf
             ancho_subbase_inf = ancho_subbase_sup + (h_sub_m * 3.0)
-            area_subbase = ancho_subbase_sup * largo_m 
+            ancho_subbase_medio = ancho_subbase_sup + (h_sub_m * 1.5) # Promedio para trapecio
+            vol_subbase = round(ancho_subbase_medio * h_sub_m * largo_m, 1) 
             
             # Lógica Asfalto vs Capseal
             if is_cape_seal:
@@ -749,27 +750,27 @@ else:
             c_cub1.metric(f"Cantidad {nombre_asfalto}", f"{cant_asf:,.1f} {uni_asf}", delta_asf, delta_color="off")
             c_cub2.metric("Área Imprimación", f"{area_imprimacion:,.1f} m²")
             c_cub3.metric("Volumen Base", f"{vol_base:,.1f} m³", f"Espesor: {st.session_state.inp_d2} cm", delta_color="off")
-            c_cub4.metric("Área Subbase", f"{area_subbase:,.1f} m²", f"Espesor: {st.session_state.inp_d3} cm", delta_color="off")
+            c_cub4.metric("Volumen Subbase", f"{vol_subbase:,.1f} m³", f"Espesor: {st.session_state.inp_d3} cm", delta_color="off")
 
             st.markdown("---")
             st.subheader("💵 Valorización")
             
             pu_imprimacion = 1500
             pu_base = 40000
-            pu_subbase = 1300
+            pu_subbase = 18300 # ACTUALIZADO AL VALOR DE ONDAC
 
             tot_asfalto = cant_asf * pu_asf
             tot_imprimacion = area_imprimacion * pu_imprimacion
             tot_base = vol_base * pu_base
-            tot_subbase = area_subbase * pu_subbase
+            tot_subbase = vol_subbase * pu_subbase
             tot_proyecto = tot_asfalto + tot_imprimacion + tot_base + tot_subbase
 
             col_p1, col_p2 = st.columns([2, 1])
             with col_p1:
                 df_presupuesto = pd.DataFrame({
                     "Ítem": [nombre_asfalto, "Imprimación Asfáltica", "Base Granular (CBR 100%)", "Subbase Granular"],
-                    "Unidad": [uni_asf, "m²", "m³", "m²"],
-                    "Cantidad": [cant_asf, area_imprimacion, vol_base, area_subbase],
+                    "Unidad": [uni_asf, "m²", "m³", "m³"], # ACTUALIZADO A m3
+                    "Cantidad": [cant_asf, area_imprimacion, vol_base, vol_subbase], # ACTUALIZADO A VOLUMEN
                     "P.U. ($)": [pu_asf, pu_imprimacion, pu_base, pu_subbase],
                     "Total ($)": [tot_asfalto, tot_imprimacion, tot_base, tot_subbase]
                 })
